@@ -1,17 +1,18 @@
-use winit::{application::ApplicationHandler, error::EventLoopError, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, error::EventLoopError, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}};
 
 use koi;
+use koi::info::Info;
 
 struct App {
-    name: String,
+    info: Info,
     window: Option<Window>,
     ren: Option<koi::ren::Handle>,
 }
 
 impl App {
-    pub fn new(name: String) -> Self {
+    pub fn new(info: Info) -> Self {
         Self {
-            name: name,
+            info: info,
             window: None,
             ren: None,
         }
@@ -22,12 +23,13 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = Window::default_attributes()
             .with_resizable(false)
-            .with_title(&self.name);
+            .with_inner_size(PhysicalSize::new(1920, 1080))
+            .with_title(self.info.app_name.to_string_lossy().into_owned());
 
-        let window = event_loop.create_window(window_attributes).expect(&format!("{} - Failed to create window", &self.name));
+        let window = event_loop.create_window(window_attributes).expect(&format!("{:?} - Failed to create window", &self.info.app_name));
 
         self.window = Some(window);
-        self.ren = Some(koi::ren::new(&self.name))
+        self.ren = Some(koi::ren::new(&self.info))
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -48,8 +50,8 @@ fn main() -> Result<(), EventLoopError> {
     };
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let app_name = String::from("Pond");
-    let mut app = App::new(app_name);
+    let info = koi::info::new(String::from("Pond"), koi::info::make_version(0, 1, 0, 0));
+    let mut app = App::new(info);
 
     match event_loop.run_app(&mut app) {
         Ok(()) => (),

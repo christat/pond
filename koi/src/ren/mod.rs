@@ -1,25 +1,26 @@
-use std::ffi::CStr;
-
 #[cfg(feature = "directx")]
 mod dx;
-
 #[cfg(feature = "vulkan")]
 mod vk;
 
+mod info;
+
+use crate::info::Info;
+
 trait Renderer {
-    fn new(app_name: &str) -> Self;
+    fn new(info: &Info) -> Self;
 }
 
 pub struct Handle {
     #[cfg(feature = "directx")]
-    api: dx::DxRenderer,
+    api: dx::Renderer,
     #[cfg(feature = "vulkan")]
-    api: vk::VkRenderer,
+    api: vk::Renderer,
 }
 
-pub fn new(app_name: &str) -> Handle {
+pub fn new(info: &Info) -> Handle {
     #[cfg(feature = "directx")]
-    return Handle { api: dx::DxRenderer::new(app_name) };
+    return Handle { api: dx::Renderer::new(info) };
     #[cfg(feature = "vulkan")]
-    return Handle { api: vk::VkRenderer::new(app_name) };
+    return Handle { api: vk::Renderer::new(info) };
 }

@@ -1,38 +1,44 @@
-use ash::Entry;
-use config::VkConfig;
-
-mod config;
+mod device;
 mod instance;
+mod surface;
 
-use crate::ren::Renderer;
-use crate::ren::vk::instance::VkInstance;
-use crate::t;
+use device::Device;
+use instance::Instance;
+use surface::Surface;
+use crate::{info::Info, t};
+use super::{info::Info as RenInfo, Renderer as RendererTrait};
 
-pub struct VkRenderer {
-    config: VkConfig,
+use ash::Entry;
+
+pub struct Renderer {
+    ren_info: RenInfo,
     entry: Entry,
-    instance: VkInstance,
-    // physical_device: vk::PhysicalDevice,
-    // device: vk::Device,
-    // surface: vk::SurfaceKHR
+    instance: Instance,
+    device: Device,
+    surface: Surface,
+    // swapchain: Swapchain,
 }
 
-impl Renderer for VkRenderer {
-    fn new(app_name: &str) -> Self {
-        let entry = unsafe { Entry::load().expect("VkRenderer::new - Failed to create Vulkan Instance") };
+impl RendererTrait for Renderer {
+    fn new(info: &Info) -> Self {
+        let entry = unsafe { Entry::load().expect("ren::vk::new - Failed to create Vulkan Instance") };
 
-        let config = VkConfig::new(&entry, app_name, "koi");
-        let instance = VkInstance::new(&entry, &config);
+        let ren_info = RenInfo::new();
+        let instance = Instance::new(&entry, &info, &ren_info);
+        let device = Device::new(&instance.handle);
+        let surface = Surface::new(&entry, &instance.handle);
 
         Self {
-            config: config,
+            ren_info: ren_info,
             entry: entry,
             instance: instance,
+            device: device,
+            surface: surface
         }
     }
 }
 
-impl t::Drop for VkRenderer {
+impl t::Drop for Renderer {
     fn drop(&mut self) {
         self.instance.drop();
     }

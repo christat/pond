@@ -1,36 +1,40 @@
-use ash::{vk::{self, make_api_version, ApplicationInfo, InstanceCreateInfo}, Entry, Instance, ext::debug_utils};
+mod config;
 
-use crate::{ren::vk::config::VkConfig, t};
+use crate::{info::Info, ren::info::Info as RenInfo, t};
+
+use ash::{vk, Entry, Instance as VkInstance, ext::debug_utils};
 
 #[cfg(feature = "debug")]
-struct VkInstanceDebugUtils {
+struct InstanceDebugUtils {
     instance: debug_utils::Instance,
     messenger: vk::DebugUtilsMessengerEXT,
 }
 
-pub struct VkInstance {
-    instance: Instance,
+pub struct Instance {
+    pub handle: VkInstance,
     #[cfg(feature = "debug")]
-    debug_utils: VkInstanceDebugUtils
+    debug_utils: InstanceDebugUtils
 }
 
-impl VkInstance {
-    pub fn new(entry: &Entry, config: &VkConfig) -> Self {
-        let app_info = ApplicationInfo::default()
-                .application_name(&config.app_name)
-                .application_version(vk::make_api_version(0, 0, 1, 0))
-                .engine_name(&config.engine_name)
-                .engine_version(vk::make_api_version(0, 0, 1, 0))
-                .api_version(make_api_version(0, 1, 3, 0));
+impl Instance {
+    pub fn new(entry: &Entry, info: &Info, ren_info: &RenInfo) -> Self {
+        let app_info = vk::ApplicationInfo::default()
+                .application_name(&info.app_name)
+                .application_version(info.app_version)
+                .engine_name(&info.engine_name)
+                .engine_version(info.engine_version)
+                .api_version(ren_info.api_version);
     
-        let extensions = config.instance.get_extensions();
-        let layers = config.instance.get_layers();
-        let create_info = InstanceCreateInfo::default()
+        let instance_config = config::Instance::new(entry).expect("ren::vk::Instance - failed to create Config");
+        let extensions = instance_config.get_extensions();
+        let layers = instance_config.get_layers();
+
+        let create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
             .enabled_extension_names(&extensions)
             .enabled_layer_names(&layers);
     
-        let instance = unsafe { entry.create_instance(&create_info, None).expect("vkRenderer::Instance - failed to create Instance") };
+        let instance = unsafe { entry.create_instance(&create_info, None).expect("ren::vk::Instance - failed to create Instance") };
 
         #[cfg(feature = "debug")]
         {
@@ -49,13 +53,13 @@ impl VkInstance {
                 )
                 .pfn_user_callback(Some(pfn_user_callback));
 
-            let debug_utils_messenger: vk::DebugUtilsMessengerEXT = unsafe { debug_utils_instance.create_debug_utils_messenger(&messenger_create_info, None).expect("VkRenderer::Instance - failed to create debug utils messenger") };
+            let debug_utils_messenger: vk::DebugUtilsMessengerEXT = unsafe { debug_utils_instance.create_debug_utils_messenger(&messenger_create_info, None).expect("ren::vk::Instance - failed to create debug utils messenger") };
             
-            Self { instance: instance, debug_utils: VkInstanceDebugUtils{ instance: debug_utils_instance, messenger: debug_utils_messenger } }
+            Self { handle: instance, debug_utils: InstanceDebugUtils{ instance: debug_utils_instance, messenger: debug_utils_messenger } }
         }
         #[cfg(not(feature = "debug"))]
         {
-            Self { instance: instance }
+            Self { handle: instance }
         }
     }
 }
@@ -95,10 +99,10 @@ unsafe extern "system" fn pfn_user_callback(
 }
 
 
-impl t::Drop for VkInstance {
+impl t::Drop for Instance {
     fn drop(&mut self) {
         #[cfg(feature = "debug")]
         unsafe { self.debug_utils.instance.destroy_debug_utils_messenger(self.debug_utils.messenger, None) };
-        unsafe { self.instance.destroy_instance(None) };
+        unsafe { self.handle.destroy_instance(None) };
     }
 }

@@ -1,12 +1,12 @@
 use std::ffi::CStr;
 
-use crate::ren::Renderer;
+use crate::ren::Renderer as RendererTrait;
 
-pub struct DxRenderer {
+pub struct Renderer {
 }
 
-impl Renderer for VkRenderer {
-    fn new(name: &CStr) -> Self {
+impl RendererTrait for Renderer {
+    fn new(app_name: &str) -> Self {
         Self {
         }
     }
