@@ -10,6 +10,7 @@ pub struct Device<'a> {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum DeviceConfigError {
     FeatureNotSupported(CString),
     ExtensionNotSupported(CString),

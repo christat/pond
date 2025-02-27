@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 ash = "0.38.0"
 log = "0.4"
+winit = "0.30.9"
 
 [features]
 default = ["vulkan", "debug"]

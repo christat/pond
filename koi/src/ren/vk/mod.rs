@@ -5,31 +5,34 @@ mod surface;
 use device::Device;
 use instance::Instance;
 use surface::Surface;
-use crate::{info::Info, t};
-use super::{info::Info as RenInfo, Renderer as RendererTrait};
+use crate::{info::Info, t::Drop};
+use super::{info::Info as RenInfo, window::Window, Renderer as RendererTrait};
 
 use ash::Entry;
 
+#[allow(unused)]
 pub struct Renderer {
     ren_info: RenInfo,
+    window: Window,
     entry: Entry,
     instance: Instance,
-    device: Device,
     surface: Surface,
+    device: Device,
     // swapchain: Swapchain,
 }
 
 impl RendererTrait for Renderer {
-    fn new(info: &Info) -> Self {
+    fn new(info: &Info, window: Window) -> Self {
         let entry = unsafe { Entry::load().expect("ren::vk::new - Failed to create Vulkan Instance") };
 
         let ren_info = RenInfo::new();
         let instance = Instance::new(&entry, &info, &ren_info);
+        let surface = Surface::new(&entry, &instance.handle, &window);
         let device = Device::new(&instance.handle);
-        let surface = Surface::new(&entry, &instance.handle);
 
         Self {
             ren_info: ren_info,
+            window: window,
             entry: entry,
             instance: instance,
             device: device,
@@ -38,8 +41,10 @@ impl RendererTrait for Renderer {
     }
 }
 
-impl t::Drop for Renderer {
+impl Drop for Renderer {
     fn drop(&mut self) {
+        //self.swaphain.drop();
         self.instance.drop();
+        self.device.drop();
     }
 }

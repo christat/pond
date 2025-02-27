@@ -7,6 +7,7 @@ pub struct Instance {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum InstanceConfigError {
     LayerNotSupported(CString),
     ExtensionNotSupported(CString)
@@ -29,8 +30,6 @@ impl Instance {
             khr::win32_surface::NAME.to_owned(),
             #[cfg(target_os = "linux")]
             khr::xcb_surface::NAME.to_owned(),
-            #[cfg(target_os = "macos")]
-            khr::macos::NAME.to_owned(),
 
             #[cfg(feature = "debug")]
             ext::debug_utils::NAME.to_owned(),

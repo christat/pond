@@ -5,6 +5,7 @@ use crate::t;
 use ash::{vk, Device as VkDevice, Instance};
 use std::cmp::Ord;
 
+#[allow(unused)]
 pub struct Device {
     physical_device: vk::PhysicalDevice,
     device: VkDevice
