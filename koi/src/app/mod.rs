@@ -1,4 +1,6 @@
-use crate::{info, ren};
+pub mod info;
+
+use crate::ren;
 
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, error::EventLoopError, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}};
 

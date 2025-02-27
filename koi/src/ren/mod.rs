@@ -6,7 +6,7 @@ mod vk;
 mod info;
 mod window;
 
-use crate::info::Info;
+use crate::app::info::Info;
 use window::Window;
 use winit::window::Window as WindowHandle;
 

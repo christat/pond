@@ -1,6 +1,6 @@
 mod config;
 
-use crate::{info::Info, ren::info::Info as RenInfo, t};
+use crate::{app::info::Info, ren::info::Info as RenInfo, t};
 
 use ash::{vk, Entry, Instance as VkInstance, ext::debug_utils};
 

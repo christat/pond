@@ -5,7 +5,7 @@ mod surface;
 use device::Device;
 use instance::Instance;
 use surface::Surface;
-use crate::{info::Info, t::Drop};
+use crate::{app::info::Info, t::Drop};
 use super::{info::Info as RenInfo, window::Window, Renderer as RendererTrait};
 
 use ash::Entry;
@@ -46,5 +46,6 @@ impl Drop for Renderer {
         //self.swaphain.drop();
         self.instance.drop();
         self.device.drop();
+        self.surface.drop();
     }
 }
