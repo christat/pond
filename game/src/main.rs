@@ -3,5 +3,5 @@ use koi;
 
 fn main() {
     env_logger::init();
-    koi::app::new(String::from("Pond")).run().unwrap();
+    koi::app::new(c"Pond").run().expect("Pond - failed to run Main Loop");
 }

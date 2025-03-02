@@ -22,7 +22,7 @@ pub enum WindowError {
 
 impl Window {
     pub fn new(window: &WindowHandle) -> Result<Window, WindowError> {
-        let display_handle = window.display_handle().expect("koi::ren::WindowHandle - failed to get display handle");
+        let display_handle = window.display_handle().expect("koi::ren::Window - failed to get display handle");
         let display = match display_handle.as_raw() {
             #[cfg(target_os = "windows")]
             RawDisplayHandle::Windows(handle) => Ok(handle),
@@ -31,7 +31,7 @@ impl Window {
             _ => Err(WindowError::DisplayHandleError),
         }?;
 
-        let window_handle = window.window_handle().expect("koi::ren::WindowHandle - failed to get window handle");
+        let window_handle = window.window_handle().expect("koi::ren::Window - failed to get window handle");
         let window = match window_handle.as_raw() {
             #[cfg(target_os = "windows")]
             RawWindowHandle::Win32(handle) => Ok(handle),

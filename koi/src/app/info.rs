@@ -1,20 +1,20 @@
-use std::ffi::CString;
+use std::ffi::CStr;
 
-pub struct Info {
-    pub app_name: CString,
+pub struct Info<'a> {
+    pub app_name: &'a CStr,
     pub app_version: u32,
-    pub engine_name: CString,
+    pub engine_name: &'a CStr,
     pub engine_version: u32,
 }
 
 pub fn new(
-    app_name: String,
+    app_name: &CStr,
     app_version: u32,
 ) -> Info {
     Info {
-        app_name: CString::new(app_name).unwrap(),
+        app_name: app_name,
         app_version: app_version,
-        engine_name: CString::new("koi").unwrap(),
+        engine_name: c"koi",
         engine_version: make_version(0, 1, 0, 0)
     }
 }

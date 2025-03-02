@@ -2,15 +2,34 @@ pub mod info;
 
 use crate::ren;
 
+use std::ffi::CStr;
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, error::EventLoopError, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}};
 
-pub struct App {
-    info: info::Info,
-    window: Option<Window>,
-    ren: Option<ren::Handle>,
+pub struct Runtime {
+    window: Window,
+    ren: ren::Handle
 }
 
-impl App {
+impl Runtime {
+    pub fn new(window: Window, ren: ren::Handle) -> Self {
+        Self { window, ren }
+    }
+
+    fn update(&mut self) {
+        self.ren.draw();
+    }
+
+    fn redraw(&mut self) {
+        self.window.request_redraw();
+    }
+}
+
+pub struct App<'a> {
+    info: info::Info<'a>,
+    runtime: Option<Runtime>,
+}
+
+impl App<'_> {
     pub fn run(&mut self) -> Result<(), EventLoopError> {
         let event_loop =  EventLoop::new()?;
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -18,15 +37,14 @@ impl App {
     }
 }
 
-pub fn new(name: String) -> App {
+pub fn new(name: &CStr) -> App {
     App {
         info: info::new(name, info::make_version(0, 1, 0, 0)),
-        window: None,
-        ren: None,
+        runtime: None,
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for App<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         
         let window_attributes = Window::default_attributes()
@@ -34,16 +52,19 @@ impl ApplicationHandler for App {
             .with_inner_size(PhysicalSize::new(1920, 1080))
             .with_title(self.info.app_name.to_string_lossy().into_owned());
 
-        let window = event_loop.create_window(window_attributes).expect(&format!("koi::App - Failed to create window"));
-        self.ren = Some(ren::new(&self.info,&window));
-        self.window = Some(window);
+        let window = event_loop.create_window(window_attributes).expect("koi::App - Failed to create window");
+        let ren = ren::new(&self.info,&window);
+
+        self.runtime = Some(Runtime::new(window, ren));
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                // Draw.
+                let runtime = self.runtime.as_mut().unwrap();
+                runtime.update();
+                runtime.redraw();
             }
             _ => (),
         }
