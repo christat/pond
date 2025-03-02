@@ -4,13 +4,13 @@ use config::{PhysicalDeviceQueueFamilies, QueueFamilyType};
 use crate::traits;
 use super::surface::Surface;
 
-use ash::{vk, Device as VkDevice, Instance};
+use ash::{vk, Device as DeviceHandle, Instance};
 
 #[allow(unused)]
 pub struct Device {
     pub physical_device: vk::PhysicalDevice,
     pub queue_families: PhysicalDeviceQueueFamilies,
-    pub handle: VkDevice,
+    pub handle: DeviceHandle,
 }
 
 impl Device {

@@ -3,15 +3,15 @@ pub mod info;
 use crate::ren;
 
 use std::ffi::CStr;
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, error::EventLoopError, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}};
+use winit::{application, dpi, error, event, event_loop, window};
 
 pub struct Runtime {
-    window: Window,
-    ren: ren::Handle
+    pub window: window::Window,
+    pub ren: ren::Handle
 }
 
 impl Runtime {
-    pub fn new(window: Window, ren: ren::Handle) -> Self {
+    pub fn new(window: window::Window, ren: ren::Handle) -> Self {
         Self { window, ren }
     }
 
@@ -25,14 +25,14 @@ impl Runtime {
 }
 
 pub struct App<'a> {
-    info: info::Info<'a>,
-    runtime: Option<Runtime>,
+    pub info: info::Info<'a>,
+    pub runtime: Option<Runtime>,
 }
 
 impl App<'_> {
-    pub fn run(&mut self) -> Result<(), EventLoopError> {
-        let event_loop =  EventLoop::new()?;
-        event_loop.set_control_flow(ControlFlow::Poll);
+    pub fn run(&mut self) -> Result<(), error::EventLoopError> {
+        let event_loop =  event_loop::EventLoop::new()?;
+        event_loop.set_control_flow(event_loop::ControlFlow::Poll);
         event_loop.run_app(self)
     }
 }
@@ -44,13 +44,13 @@ pub fn new(name: &CStr) -> App {
     }
 }
 
-impl ApplicationHandler for App<'_> {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        
-        let window_attributes = Window::default_attributes()
+impl application::ApplicationHandler for App<'_> {
+    fn resumed(&mut self, event_loop: &event_loop::ActiveEventLoop) {
+        let window_attributes = window::Window::default_attributes()
             .with_resizable(false)
-            .with_inner_size(PhysicalSize::new(1920, 1080))
-            .with_title(self.info.app_name.to_string_lossy().into_owned());
+            .with_inner_size(dpi::PhysicalSize::new(1920, 1080))
+            .with_title(self.info.app_name.to_string_lossy().into_owned())
+            .with_window_icon(Some(load_icon(include_bytes!("../../../assets/window/icon.png"))));
 
         let window = event_loop.create_window(window_attributes).expect("koi::App - Failed to create window");
         let ren = ren::new(&self.info,&window);
@@ -58,10 +58,15 @@ impl ApplicationHandler for App<'_> {
         self.runtime = Some(Runtime::new(window, ren));
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &event_loop::ActiveEventLoop, _id: window::WindowId, event:event::WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::RedrawRequested => {
+            event::WindowEvent::CloseRequested => event_loop.exit(),
+            event::WindowEvent::KeyboardInput { event, .. } => {
+                if event.physical_key == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape) {
+                    event_loop.exit();
+                }
+            }
+            event::WindowEvent::RedrawRequested => {
                 let runtime = self.runtime.as_mut().unwrap();
                 runtime.update();
                 runtime.redraw();
@@ -69,4 +74,14 @@ impl ApplicationHandler for App<'_> {
             _ => (),
         }
     }
+}
+
+fn load_icon(bytes: &[u8]) -> window::Icon {
+    let (icon_rgba, icon_width, icon_height) = {
+        let image = image::load_from_memory(bytes).unwrap().into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        (rgba, width, height)
+    };
+    window::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("koi::window - failed to open icon")
 }

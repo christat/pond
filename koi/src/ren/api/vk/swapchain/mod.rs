@@ -1,7 +1,7 @@
 use crate::ren::settings::Resolution;
 use super::{device::Device, instance::Instance, surface::Surface};
 
-use ash::{vk, khr};
+use ash::{vk, khr, Device as DeviceHandle};
 use std::cmp;
 
 pub struct SurfaceSupport {
@@ -30,6 +30,7 @@ pub struct Swapchain {
     pub format: vk::Format,
     pub images: Vec<vk::Image>,
     pub image_views: Vec<vk::ImageView>,
+    pub extent: vk::Extent2D,
 }
 
 impl Swapchain {
@@ -90,14 +91,14 @@ impl Swapchain {
             unsafe { device.handle.create_image_view(&create_info, None).expect("koi::ren::vk::swapchain - failed to get swapchain Image View") }
         }).collect();
 
-        Self { device: swapchain_device, khr, format: surface_format.format, images, image_views }
+        Self { device: swapchain_device, khr, format: surface_format.format, images, image_views, extent: swapchain_extent }
     }
 
-    pub fn drop(&mut self, device: &Device) {
+    pub fn drop(&mut self, device_handle: &DeviceHandle) {
         unsafe{
             self.device.destroy_swapchain(self.khr, None);
-            self.images.clear();
-            self.image_views.iter().for_each(|image_view| device.handle.destroy_image_view(*image_view, None) );
+            self.images.clear(); // Swaphain owns the images; no need to destroy
+            self.image_views.iter().for_each(|image_view| device_handle.destroy_image_view(*image_view, None) );
             self.image_views.clear();
         };
         
