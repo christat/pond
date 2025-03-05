@@ -41,7 +41,6 @@ impl Frame {
 
     pub fn drop(&mut self, device: &DeviceHandle) {
         unsafe { 
-            device.device_wait_idle().expect("koi::ren::vk::Frame - failed to Wait for Device Idle");
             device.destroy_command_pool(self.command_pool, None);
             device.destroy_fence(self.render_fence, None);
             device.destroy_semaphore(self.render_semaphore, None);
@@ -51,9 +50,7 @@ impl Frame {
 }
 
 fn create_semaphore(device_handle: &DeviceHandle, flags: Option<vk::SemaphoreCreateFlags>) -> vk::Semaphore {
-    let mut create_info = vk::SemaphoreCreateInfo::default();
-    if flags.is_some() { create_info = create_info.flags(flags.unwrap()); };
-
+    let mut create_info = vk::SemaphoreCreateInfo::default().flags(flags.unwrap_or_default());
     unsafe{ device_handle.create_semaphore(&create_info, None).expect("koi::ren::vk::Frame - failed to reate Semaphore") }
 }
 

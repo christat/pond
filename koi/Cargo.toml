@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [package]
 name = "koi"
 version = "0.1.0"
@@ -15,3 +17,14 @@ default = ["vulkan", "debug"]
 debug = []
 vulkan = []
 directx = []
+
+[build-dependencies]
+glob = "0.3.2"
+spirv-builder = { git = "https://github.com/Rust-GPU/rust-gpu.git" }
+
+# Compile build-dependencies in release mode with the same settings as regular dependencies.
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 16
+[profile.dev.build-override]
+opt-level = 3

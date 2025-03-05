@@ -1,11 +1,11 @@
-use super::allocator::AllocatedResources;
+use super::resource_allocator::AllocatedResources;
 
 use ash::{vk, Device as DeviceHandle};
 use gpu_allocator::{vulkan as vka, MemoryLocation};
 
 #[allow(unused)]
 pub struct Image {
-    pub image: vk::Image,
+    pub handle: vk::Image,
     pub view: vk::ImageView,
     pub extent_3d: vk::Extent3D,
     pub extent_2d: vk::Extent2D,
@@ -66,7 +66,7 @@ impl Image {
             .width(extent.width)
             .height(extent.height);
 
-        Self { image, view, extent_3d: extent, extent_2d, format }
+        Self { handle: image, view, extent_3d: extent, extent_2d, format }
     }
 }
 

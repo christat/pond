@@ -1,3 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["game", "koi"]
+members = [
+    "game",
+    "koi",
+    "shaders/gradient"
+]

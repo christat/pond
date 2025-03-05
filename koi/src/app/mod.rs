@@ -50,7 +50,7 @@ impl application::ApplicationHandler for App<'_> {
             .with_resizable(false)
             .with_inner_size(dpi::PhysicalSize::new(1920, 1080))
             .with_title(self.info.app_name.to_string_lossy().into_owned())
-            .with_window_icon(Some(load_icon(include_bytes!("../../../assets/window/icon.png"))));
+            .with_window_icon(Some(load_icon(include_bytes!("../../../resources/assets/window/icon.png"))));
 
         let window = event_loop.create_window(window_attributes).expect("koi::App - Failed to create window");
         let ren = ren::new(&self.info,&window);

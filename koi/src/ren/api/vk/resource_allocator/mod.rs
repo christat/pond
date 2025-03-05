@@ -1,7 +1,8 @@
-use std::collections::VecDeque;
+use crate::ren::settings::Settings;
 
 use ash::{vk, Device as DeviceHandle, Instance as InstanceHandle};
 use gpu_allocator::vulkan as vka;
+use std::collections::VecDeque;
 
 pub struct AllocatedResources {
     images: VecDeque<(vk::Image, vk::ImageView, vka::Allocation)>
@@ -30,15 +31,15 @@ impl AllocatedResources {
     }
 }
 
-pub struct Allocator {
+pub struct ResourceAllocator {
     pub handle: vka::Allocator,
     pub frame_resources: Vec<AllocatedResources>,
     pub global_resources: AllocatedResources,
 }
 
 #[allow(unused)]
-impl Allocator {
-    pub fn new(instance: InstanceHandle, device: DeviceHandle, physical_device: vk::PhysicalDevice, buffering: u32) -> Self {
+impl ResourceAllocator {
+    pub fn new(instance: InstanceHandle, device: DeviceHandle, physical_device: vk::PhysicalDevice, settings: &Settings) -> Self {
         let handle = vka::Allocator::new(&vka::AllocatorCreateDesc {
             instance,
             device,
@@ -48,7 +49,7 @@ impl Allocator {
             allocation_sizes: Default::default()
         }).expect("koi::ren::vk - failed to create Allocator");
 
-        let frame_resources = (0..buffering).into_iter().map(|_| AllocatedResources::new()).collect();
+        let frame_resources = (0..settings.buffering).into_iter().map(|_| AllocatedResources::new()).collect();
 
         Self { handle, frame_resources, global_resources: AllocatedResources::new() }
     }
@@ -60,12 +61,13 @@ impl Allocator {
         }
     }
 
-    pub fn drop_frame(&mut self, device: &DeviceHandle, frame: usize) {
+    pub fn drop_frame_resources(&mut self, device: &DeviceHandle, frame: usize) {
         self.frame_resources[frame].drop(device, &mut self.handle);
     }
 
     pub fn drop(&mut self, device: &DeviceHandle) {
         self.frame_resources.iter_mut().for_each(|handle| handle.drop(device, &mut self.handle));
         self.global_resources.drop(device, &mut self.handle);
+        self.handle.report_memory_leaks(log::Level::Error);
     }
 }
