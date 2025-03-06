@@ -23,6 +23,6 @@ pub fn main(
             color.y = texel_coord.y as f32 / image_size.y as f32;
         }
 
-        unsafe{ image.write(texel_coord, color) };
+        unsafe { image.write(texel_coord, color) };
     }
 }

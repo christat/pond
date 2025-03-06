@@ -50,7 +50,7 @@ impl Frame {
 }
 
 fn create_semaphore(device_handle: &DeviceHandle, flags: Option<vk::SemaphoreCreateFlags>) -> vk::Semaphore {
-    let mut create_info = vk::SemaphoreCreateInfo::default().flags(flags.unwrap_or_default());
+    let create_info = vk::SemaphoreCreateInfo::default().flags(flags.unwrap_or_default());
     unsafe{ device_handle.create_semaphore(&create_info, None).expect("koi::ren::vk::Frame - failed to reate Semaphore") }
 }
 

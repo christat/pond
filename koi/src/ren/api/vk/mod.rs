@@ -108,7 +108,7 @@ impl RendererTrait for Renderer {
 
         let compute_shader = pipeline::load_shader_module(&device.handle, pipeline::GRADIENT_SHADER, None);
         let compute_pipeline_layout = pipeline::create_pipeline_layout(&device.handle, &image_descriptor_set_layouts);
-        let compute_pipelines = pipeline::create_compute_pipeline(&device.handle, compute_shader.clone(), layout, cache);
+        let compute_pipelines = pipeline::create_compute_pipeline(&device.handle, compute_shader.clone(), compute_pipeline_layout);
 
         Self { 
             settings,
@@ -234,7 +234,7 @@ impl<'a> Renderer {
             self.device.handle.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipelines[0]);
             let dynamic_offsets = [];
             self.device.handle.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipeline_layout, 0, &self.image_descriptors, &dynamic_offsets);
-            self.device.handle.cmd_dispatch(command_buffer, (self.image.extent_2d.width / 16).ceil(), (self.image.extent_2d.height / 16).ceil(), 1);
+            self.device.handle.cmd_dispatch(command_buffer, (self.image.extent_2d.width as f32 / 16.0).ceil() as u32, (self.image.extent_2d.height as f32 / 16.0).ceil() as u32, 1);
         };
     }
 }
@@ -244,9 +244,9 @@ impl Drop for Renderer {
         unsafe { self.device.handle.device_wait_idle().expect("koi::ren::vk - failed to Wait for Device Idle") };
 
         unsafe { 
-            self.device.handle.destroy_shader_module(&self.compute_shader, None);
-            self.device.handle.destroy_pipeline_layout(&self.compute_pipeline_layout, None);
-            self.device.handle.destroy_pipeline(&self.compute_pipelines[0], None);
+            self.device.handle.destroy_shader_module(self.compute_shader, None);
+            self.device.handle.destroy_pipeline_layout(self.compute_pipeline_layout, None);
+            self.compute_pipelines.iter().for_each(|pipeline|  self.device.handle.destroy_pipeline(pipeline.clone(), None));
         };
         
         self.frames.iter_mut().for_each(|frame| frame.drop(&self.device.handle));
