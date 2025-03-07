@@ -1,6 +1,6 @@
-mod api;
-mod settings;
-mod window;
+pub mod api;
+pub mod settings;
+pub mod window;
 
 use crate::app::info::Info;
 use window::Window;
@@ -15,9 +15,9 @@ pub trait Renderer {
 #[allow(unused)]
 pub struct Handle {
     #[cfg(feature = "directx")]
-    api: api::dx::Renderer,
+    pub api: api::dx::Renderer,
     #[cfg(feature = "vulkan")]
-    api: api::vk::Renderer,
+    pub api: api::vk::Renderer,
 }
 
 pub fn new(info: &Info, window_handle: &WindowHandle) -> Handle {

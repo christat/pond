@@ -19,7 +19,7 @@ pub fn create_pipeline_layout(device_handle: &DeviceHandle, set_layouts: &[vk::D
     unsafe { device_handle.create_pipeline_layout(&create_info, None).expect("koi::ren::vk::pipeline - failed to create pipeline layout") }
 }
 
-pub fn create_compute_pipeline(device_handle: &DeviceHandle, shader_module: vk::ShaderModule, layout: vk::PipelineLayout) -> Vec<vk::Pipeline> {
+pub fn create_compute_pipeline(device_handle: &DeviceHandle, shader_module: vk::ShaderModule, layout: vk::PipelineLayout) -> vk::Pipeline {
     let stage = vk::PipelineShaderStageCreateInfo::default()
         .stage(vk::ShaderStageFlags::COMPUTE)
         .name(c"main")
@@ -31,5 +31,5 @@ pub fn create_compute_pipeline(device_handle: &DeviceHandle, shader_module: vk::
             .stage(stage)
     ];
 
-    unsafe{ device_handle.create_compute_pipelines(vk::PipelineCache::null(), &create_infos, None).expect("koi::ren::vk::pipeline - failed to create compute pipeline") }
+    unsafe{ device_handle.create_compute_pipelines(vk::PipelineCache::null(), &create_infos, None).expect("koi::ren::vk::pipeline - failed to create compute pipeline")[0] }
 }

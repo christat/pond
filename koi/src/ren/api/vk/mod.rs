@@ -2,11 +2,14 @@ pub mod descriptor;
 pub mod device;
 pub mod frame;
 pub mod image;
+pub mod imgui;
 pub mod instance;
 pub mod pipeline;
 pub mod resource_allocator;
 pub mod surface;
 pub mod swapchain;
+
+use std::u64;
 
 use crate::{ren::{settings::Resolution, Info, Renderer as RendererTrait, Settings, Window}, traits::Drop};
 use resource_allocator::ResourceAllocator;
@@ -20,71 +23,21 @@ use swapchain::{Swapchain, SurfaceSupport};
 
 use ash::{Device as DeviceHandle, Entry, vk};
 
-fn update_sets(device_handle: &DeviceHandle, image_view: vk::ImageView, dst_set: vk::DescriptorSet) {
-    let image_info = [
-        vk::DescriptorImageInfo::default()
-        .image_layout(vk::ImageLayout::GENERAL)
-        .image_view(image_view)
-    ];
-
-    let descriptor_writes = [
-        vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .dst_set(dst_set)
-            .descriptor_count(1)
-            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-            .image_info(&image_info)
-    ];
-
-    let descriptor_copies = [];
-
-    unsafe{ device_handle.update_descriptor_sets(&descriptor_writes, &descriptor_copies) };
+pub struct DrawManager {
+    buffering: u32,
+    pub frames: Vec<Frame>,
+    pub image: Image,
+    pub image_descriptor_set_layout: vk::DescriptorSetLayout,
+    pub image_descriptor: vk::DescriptorSet,
+    pub compute_shader: vk::ShaderModule,
+    pub compute_pipeline_layout: vk::PipelineLayout,
+    pub compute_pipeline: vk::Pipeline,
+    pub frame_count: u32,
 }
 
-#[allow(unused)]
-pub struct Renderer {
-    settings: Settings,
-    window: Window,
-
-    // Vulkan structures
-    entry: Entry,
-    instance: Instance,
-    surface: Surface,
-    device: Device,
-    swapchain: Swapchain,
-    surface_support: SurfaceSupport,
-
-    resource_allocator: ResourceAllocator,
-    descriptor_set_allocator: DescriptorSetAllocator,
-
-    frames: Vec<Frame>,
-    graphics_queue: vk::Queue,
-    image: Image,
-    image_descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
-    image_descriptors: Vec<vk::DescriptorSet>,
-    compute_shader: vk::ShaderModule,
-    compute_pipeline_layout: vk::PipelineLayout,
-    compute_pipelines: Vec<vk::Pipeline>,
-
-    frame_count: u32,
-}
-
-impl RendererTrait for Renderer {
-    fn new(info: &Info, settings: Settings, window: Window) -> Self {
-        let entry = unsafe { Entry::load().expect("koi::ren::vk - Failed to load Vulkan Instance") };
-
-        let instance = Instance::new(&entry, &info);
-        let surface = Surface::new(&entry, &instance.handle, &window);
-        let device = Device::new(&instance.handle, &surface);
-        let (swapchain, surface_support) = Swapchain::new(&instance, &device, &surface, &settings.resolution).expect("koi::ren::vk - failed to create Swapchain");
-
-        let mut resource_allocator = ResourceAllocator::new(instance.handle.clone(), device.handle.clone(), device.physical_device.clone(), &settings);
-        
-        let pool_sizes = vec![DescriptorSetPoolSizeRatio::new(vk::DescriptorType::STORAGE_IMAGE, 1.0)];
-        let mut descriptor_set_allocator = DescriptorSetAllocator::new(&device.handle, 10, &pool_sizes);
-
+impl<'a> DrawManager {
+    pub fn new(device: &Device, resource_allocator: &mut ResourceAllocator, descriptor_set_allocator: &mut DescriptorSetAllocator, settings: &Settings) -> Self {
         let frames = Frame::generator(&device, settings.buffering);
-        let graphics_queue = device.get_queue(QueueFamilyType::Graphics);
         let Resolution { width, height } = settings.resolution;
         let image = Image::new(
             &device.handle,
@@ -100,15 +53,184 @@ impl RendererTrait for Renderer {
         );
 
         let mut descriptor_set_layout_builder = DescriptorSetLayoutBuilder::default().add_binding(0, vk::DescriptorType::STORAGE_IMAGE);
-        let descriptor_set_layout = descriptor_set_layout_builder.build::<vk::DescriptorSetLayoutBindingFlagsCreateInfo>(&device.handle, vk::ShaderStageFlags::COMPUTE, None, None);
-        let image_descriptor_set_layouts = vec![descriptor_set_layout];
-        let image_descriptors = descriptor_set_allocator.allocate(&device.handle, &image_descriptor_set_layouts);
-        update_sets(&device.handle, image.view, image_descriptors.first().unwrap().clone());
-
+        let image_descriptor_set_layout = descriptor_set_layout_builder.build::<vk::DescriptorSetLayoutBindingFlagsCreateInfo>(&device.handle, vk::ShaderStageFlags::COMPUTE, None, None);
+        let image_descriptor_set_layouts = vec![image_descriptor_set_layout];
+        let image_descriptor = descriptor_set_allocator.allocate(&device.handle, &image_descriptor_set_layouts);
+        Self::update_sets(&device.handle, image.view, image_descriptor.clone());
 
         let compute_shader = pipeline::load_shader_module(&device.handle, pipeline::GRADIENT_SHADER, None);
         let compute_pipeline_layout = pipeline::create_pipeline_layout(&device.handle, &image_descriptor_set_layouts);
-        let compute_pipelines = pipeline::create_compute_pipeline(&device.handle, compute_shader.clone(), compute_pipeline_layout);
+        let compute_pipeline = pipeline::create_compute_pipeline(&device.handle, compute_shader.clone(), compute_pipeline_layout);
+
+        Self {
+            buffering: settings.buffering,
+            frames,
+            image,
+            image_descriptor_set_layout,
+            image_descriptor,
+            compute_shader,
+            compute_pipeline_layout,
+            compute_pipeline,
+            frame_count: 0
+        }
+    }
+
+    fn update_sets(device_handle: &DeviceHandle, image_view: vk::ImageView, dst_set: vk::DescriptorSet) {
+        let image_info = [
+            vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::GENERAL)
+            .image_view(image_view)
+        ];
+    
+        let descriptor_writes = [
+            vk::WriteDescriptorSet::default()
+                .dst_binding(0)
+                .dst_set(dst_set)
+                .descriptor_count(1)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .image_info(&image_info)
+        ];
+    
+        let descriptor_copies = [];
+    
+        unsafe{ device_handle.update_descriptor_sets(&descriptor_writes, &descriptor_copies) };
+    }
+
+    pub fn get_current_frame_index(&self) -> usize {
+        (self.frame_count % self.buffering) as usize
+    }
+
+    pub fn get_current_frame(&'a mut self) -> &'a mut Frame {
+        let index = self.get_current_frame_index();
+        &mut self.frames[index]
+    }
+
+    pub fn done(&mut self) {
+        self.frame_count += 1;
+    }
+
+    pub fn write_command_buffer(&mut self, device_handle: &DeviceHandle, command_buffer: vk::CommandBuffer) {
+        unsafe {
+            device_handle.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipeline);
+            let dynamic_offsets = [];
+            let descriptor_sets = [self.image_descriptor];
+            device_handle.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipeline_layout, 0, &descriptor_sets, &dynamic_offsets);
+            device_handle.cmd_dispatch(command_buffer, (self.image.extent_2d.width as f32 / 16.0).ceil() as u32, (self.image.extent_2d.height as f32 / 16.0).ceil() as u32, 1);
+        };
+    }
+
+    pub fn drop(&mut self, device_handle: &DeviceHandle) {
+        unsafe { 
+            device_handle.destroy_shader_module(self.compute_shader, None);
+            device_handle.destroy_pipeline_layout(self.compute_pipeline_layout, None);
+            device_handle.destroy_pipeline(self.compute_pipeline.clone(), None);
+            self.frames.iter_mut().for_each(|frame| frame.drop(device_handle));
+            device_handle.destroy_descriptor_set_layout(self.image_descriptor_set_layout, None);
+        };
+    }
+}
+
+#[allow(unused)]
+pub struct ImmediateManager {
+    pub command_pool: vk::CommandPool,
+    pub command_buffer: vk::CommandBuffer,
+    pub fence: vk::Fence,
+}
+
+impl<'a> ImmediateManager {
+    pub fn new(device: &Device) -> Self {
+        let pool_create_info = vk::CommandPoolCreateInfo::default()
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+            .queue_family_index(device.queue_families.get_family_index(QueueFamilyType::Graphics));
+
+        let command_pool = unsafe { device.handle.create_command_pool(&pool_create_info, None).expect("koi::ren::vk - failed to create Command Pool") };
+
+        let buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(command_pool)
+            .command_buffer_count(1)
+            .level(vk::CommandBufferLevel::PRIMARY);
+
+        let command_buffer = unsafe { device.handle.allocate_command_buffers(&buffer_allocate_info).expect("koi::ren::vk - failed to allocate Command Buffer")[0] };
+
+        let fence_create_info = vk::FenceCreateInfo::default()
+            .flags(vk::FenceCreateFlags::SIGNALED);
+
+        let fence = unsafe { device.handle.create_fence(&fence_create_info, None).expect("koi::ren::vk - failed to create Fence") };
+
+        Self { command_pool, command_buffer, fence }
+    }
+
+    pub fn submit(&mut self, device_handle: &DeviceHandle, queue: vk::Queue, command_recorder: fn(vk::CommandBuffer)) {
+        let fences = [self.fence];
+        unsafe { 
+            device_handle.reset_fences(&fences).expect("koi::ren::vk - failed to reset ImmediateManager Fence");
+            device_handle.reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty()).expect("koi::ren::vk - failed to reset ImmediateManager Command Buffer");
+        }
+
+        let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+        unsafe { device_handle.begin_command_buffer(self.command_buffer, &command_buffer_begin_info).expect("koi::ren::vk - failed to begin ImmediateManager Command Buffer") };
+
+        command_recorder(self.command_buffer);
+
+        unsafe { device_handle.end_command_buffer(self.command_buffer).expect("koi::ren::vk - failed to end ImmediateManager Command Buffer") };
+
+        let command_buffer_infos = [
+            vk::CommandBufferSubmitInfo::default()
+                .command_buffer(self.command_buffer)
+        ];
+        let submit_info = [frame::get_submit_info(&command_buffer_infos, None, None)];
+        unsafe { 
+            device_handle.queue_submit2(queue, &submit_info, self.fence).expect("koi::ren::vk - failed to Submit ImmediateManager command buffer to Queue");
+            device_handle.wait_for_fences(&fences, true, u64::MAX).expect("koi::ren::vk - failed to wait for ImmediateManager Fence");
+        }
+    }
+
+    pub fn drop(&mut self, device_handle: &DeviceHandle) {
+        unsafe {
+            device_handle.destroy_command_pool(self.command_pool, None);
+            device_handle.destroy_fence(self.fence, None);
+        }
+    }
+}
+
+#[allow(unused)]
+pub struct Renderer {
+    settings: Settings,
+    window: Window,
+
+    entry: Entry,
+    instance: Instance,
+    surface: Surface,
+    device: Device,
+    swapchain: Swapchain,
+    surface_support: SurfaceSupport,
+    graphics_queue: vk::Queue,
+
+    resource_allocator: ResourceAllocator,
+    descriptor_set_allocator: DescriptorSetAllocator,
+
+    draw_manager: DrawManager,
+    immediate_manager: ImmediateManager,
+}
+
+impl RendererTrait for Renderer {
+    fn new(info: &Info, settings: Settings, window: Window) -> Self {
+        let entry = unsafe { Entry::load().expect("koi::ren::vk - Failed to load Vulkan Instance") };
+
+        let instance = Instance::new(&entry, &info);
+        let surface = Surface::new(&entry, &instance.handle, &window);
+        let device = Device::new(&instance.handle, &surface);
+        let (swapchain, surface_support) = Swapchain::new(&instance, &device, &surface, &settings.resolution).expect("koi::ren::vk - failed to create Swapchain");
+
+        let mut resource_allocator = ResourceAllocator::new(instance.handle.clone(), device.handle.clone(), device.physical_device.clone(), &settings);
+        
+        let pool_sizes = vec![DescriptorSetPoolSizeRatio::new(vk::DescriptorType::STORAGE_IMAGE, 1.0)];
+        let mut descriptor_set_allocator = DescriptorSetAllocator::new(&device.handle, 10, &pool_sizes);
+        let graphics_queue = device.get_queue(QueueFamilyType::Graphics);
+
+        let draw_manager = DrawManager::new(&device, &mut resource_allocator, &mut descriptor_set_allocator, &settings);
+        let immediate_manager = ImmediateManager::new(&device);
 
         Self { 
             settings,
@@ -120,20 +242,13 @@ impl RendererTrait for Renderer {
             device,
             swapchain,
             surface_support,
+            graphics_queue,
 
             resource_allocator,
             descriptor_set_allocator,
-
-            frames,
-            graphics_queue,
-            image,
-            image_descriptor_set_layouts,
-            image_descriptors,
-            compute_shader,
-            compute_pipeline_layout,
-            compute_pipelines,
-
-            frame_count: 0
+            
+            draw_manager,
+            immediate_manager,
         }
     }
 
@@ -143,7 +258,7 @@ impl RendererTrait for Renderer {
         let device_handle: ash::Device = self.device.handle.clone();
 
         // clone frame data handles
-        let Frame{ command_buffer, render_fence, render_semaphore, swapchain_semaphore, .. } = self.get_current_frame();
+        let Frame{ command_buffer, render_fence, render_semaphore, swapchain_semaphore, .. } = self.draw_manager.get_current_frame();
         let command_buffer = command_buffer.clone();
         let render_fence = render_fence.clone();
         let render_semaphore = render_semaphore.clone();
@@ -151,11 +266,13 @@ impl RendererTrait for Renderer {
 
         // wait until GPU is done rendering the last frame; 1s timeout
         let fences: [vk::Fence; 1] = [render_fence.clone()];
-        unsafe { device_handle.wait_for_fences(&fences, true, SECOND_IN_NS).expect("koi::ren::vk - failed to wait for Render Fence") };
-        unsafe { device_handle.reset_fences(&fences).expect("koi::ren::vk - failed to reset Render Fence") };
+        unsafe { 
+            device_handle.wait_for_fences(&fences, true, SECOND_IN_NS).expect("koi::ren::vk - failed to wait for Render Fence");
+            device_handle.reset_fences(&fences).expect("koi::ren::vk - failed to reset Render Fence");
+        }
 
         // drop frame-specific resources
-        let frame_index = self.get_current_frame_index();
+        let frame_index = self.draw_manager.get_current_frame_index();
         self.resource_allocator.drop_frame_resources(&device_handle, frame_index);
 
         // request swapchain image
@@ -169,15 +286,15 @@ impl RendererTrait for Renderer {
         unsafe { device_handle.begin_command_buffer(command_buffer, &command_buffer_begin_info).expect("koi::ren::vk - failed to Begin current frame Command Buffer") };
 
         // transition draw image to write
-        let image = self.image.handle.clone();
+        let image = self.draw_manager.image.handle.clone();
         image::transition(&device_handle, command_buffer, image, vk::ImageLayout::UNDEFINED, vk::ImageLayout::GENERAL);
 
-        self.write_command_buffer(command_buffer);
+        self.draw_manager.write_command_buffer(&device_handle, command_buffer);
 
         // transition draw image for copy src and swaphain for copy dst; perform ccopy
         image::transition(&device_handle, command_buffer, image, vk::ImageLayout::GENERAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL);
         image::transition(&device_handle, command_buffer, swapchain_image, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL);
-        image::copy(&device_handle, command_buffer, image, swapchain_image, self.image.extent_2d, self.swapchain.extent);
+        image::copy(&device_handle, command_buffer, image, swapchain_image, self.draw_manager.image.extent_2d, self.swapchain.extent);
 
         // transition swapchain to present
         image::transition(&device_handle, command_buffer, swapchain_image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::PRESENT_SRC_KHR);
@@ -215,43 +332,16 @@ impl RendererTrait for Renderer {
         unsafe{ self.swapchain.device.queue_present(self.graphics_queue, &present_info).expect("koi::ren::vk - failed to Present swapchain image") };
 
         // frame done.
-        self.frame_count += 1;
-    }
-}
-
-impl<'a> Renderer {
-    fn get_current_frame_index(&self) -> usize {
-        (self.frame_count % self.settings.buffering) as usize
-    }
-
-    fn get_current_frame(&'a mut self) -> &'a mut Frame {
-        let index = self.get_current_frame_index();
-        &mut self.frames[index]
-    }
-
-    fn write_command_buffer(&mut self, command_buffer: vk::CommandBuffer) {
-        unsafe {
-            self.device.handle.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipelines[0]);
-            let dynamic_offsets = [];
-            self.device.handle.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipeline_layout, 0, &self.image_descriptors, &dynamic_offsets);
-            self.device.handle.cmd_dispatch(command_buffer, (self.image.extent_2d.width as f32 / 16.0).ceil() as u32, (self.image.extent_2d.height as f32 / 16.0).ceil() as u32, 1);
-        };
+        self.draw_manager.done();
     }
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe { self.device.handle.device_wait_idle().expect("koi::ren::vk - failed to Wait for Device Idle") };
-
-        unsafe { 
-            self.device.handle.destroy_shader_module(self.compute_shader, None);
-            self.device.handle.destroy_pipeline_layout(self.compute_pipeline_layout, None);
-            self.compute_pipelines.iter().for_each(|pipeline|  self.device.handle.destroy_pipeline(pipeline.clone(), None));
-        };
-        
-        self.frames.iter_mut().for_each(|frame| frame.drop(&self.device.handle));
+        self.immediate_manager.drop(&self.device.handle);
+        self.draw_manager.drop(&self.device.handle);
         self.descriptor_set_allocator.drop(&self.device.handle);
-        unsafe { self.device.handle.destroy_descriptor_set_layout(self.image_descriptor_set_layouts.first().unwrap().clone(), None) };
         self.resource_allocator.drop(&self.device.handle);
         self.swapchain.drop(&self.device.handle);
         self.device.drop();

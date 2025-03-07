@@ -76,12 +76,12 @@ impl DescriptorSetAllocator {
         Self { pool }
     }
 
-    pub fn allocate(&mut self, device_handle: &DeviceHandle, layouts: &[vk::DescriptorSetLayout]) -> Vec<vk::DescriptorSet> {
+    pub fn allocate(&mut self, device_handle: &DeviceHandle, layouts: &[vk::DescriptorSetLayout]) -> vk::DescriptorSet {
         let allocate_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(self.pool)
             .set_layouts(layouts);
 
-        unsafe { device_handle.allocate_descriptor_sets(&allocate_info).expect("koi::ren::vk::descriptor - failed to Allocate Descriptor Set") }
+        unsafe { device_handle.allocate_descriptor_sets(&allocate_info).expect("koi::ren::vk::descriptor - failed to Allocate Descriptor Set")[0] }
     }
 
     pub fn reset_pool(&mut self, device_handle: &DeviceHandle) {

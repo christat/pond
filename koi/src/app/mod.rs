@@ -1,5 +1,6 @@
 pub mod info;
 
+use crate::imgui;
 use crate::ren;
 
 use std::ffi::CStr;
@@ -7,19 +8,17 @@ use winit::{application, dpi, error, event, event_loop, window};
 
 pub struct Runtime {
     pub window: window::Window,
-    pub ren: ren::Handle
+    pub ren: ren::Handle,
+    pub imgui: imgui::ImGui,
 }
 
 impl Runtime {
-    pub fn new(window: window::Window, ren: ren::Handle) -> Self {
-        Self { window, ren }
+    pub fn new(window: window::Window, ren: ren::Handle, imgui: imgui::ImGui) -> Self {
+        Self { window, ren, imgui }
     }
 
     fn update(&mut self) {
         self.ren.draw();
-    }
-
-    fn redraw(&mut self) {
         self.window.request_redraw();
     }
 }
@@ -34,6 +33,10 @@ impl App<'_> {
         let event_loop =  event_loop::EventLoop::new()?;
         event_loop.set_control_flow(event_loop::ControlFlow::Poll);
         event_loop.run_app(self)
+    }
+
+    pub fn exit(&mut self, event_loop: &event_loop::ActiveEventLoop) {
+        event_loop.exit();
     }
 }
 
@@ -52,26 +55,31 @@ impl application::ApplicationHandler for App<'_> {
             .with_title(self.info.app_name.to_string_lossy().into_owned())
             .with_window_icon(Some(load_icon(include_bytes!("../../../resources/assets/window/icon.png"))));
 
-        let window = event_loop.create_window(window_attributes).expect("koi::App - Failed to create window");
-        let ren = ren::new(&self.info,&window);
+        let window: window::Window = event_loop.create_window(window_attributes).expect("koi::App - Failed to create window");
+        let mut ren = ren::new(&self.info,&window);
+        let imgui = imgui::ImGui::new(&window, &mut ren);
 
-        self.runtime = Some(Runtime::new(window, ren));
+        self.runtime = Some(Runtime::new(window, ren, imgui));
     }
 
-    fn window_event(&mut self, event_loop: &event_loop::ActiveEventLoop, _id: window::WindowId, event:event::WindowEvent) {
+
+    fn window_event(
+        &mut self,
+        event_loop: &event_loop::ActiveEventLoop,
+        _id: window::WindowId,
+        event: event::WindowEvent
+    ) {
+        let runtime = self.runtime.as_mut().unwrap();
+        runtime.imgui.handle_window_event(&runtime.window, &event);
+
         match event {
-            event::WindowEvent::CloseRequested => event_loop.exit(),
-            event::WindowEvent::KeyboardInput { event, .. } => {
-                if event.physical_key == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape) {
-                    event_loop.exit();
-                }
-            }
+            event::WindowEvent::CloseRequested => {
+                self.exit(event_loop);
+            },
             event::WindowEvent::RedrawRequested => {
-                let runtime = self.runtime.as_mut().unwrap();
                 runtime.update();
-                runtime.redraw();
-            }
-            _ => (),
+            },
+            _ => {}
         }
     }
 }
