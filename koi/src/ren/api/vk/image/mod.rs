@@ -60,7 +60,7 @@ impl Image {
         
         let view = unsafe { device_handle.create_image_view(&view_create_info, None).expect("koi::vk::Image - failed to create Image View") };
 
-        resources.add_image(image.clone(), view.clone(), allocation);
+        resources.add_image(image, view, allocation);
 
         let extent_2d = vk::Extent2D::default()
             .width(extent.width)

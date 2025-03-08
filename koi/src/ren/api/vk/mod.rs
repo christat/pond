@@ -56,11 +56,11 @@ impl<'a> DrawManager {
         let image_descriptor_set_layout = descriptor_set_layout_builder.build::<vk::DescriptorSetLayoutBindingFlagsCreateInfo>(&device.handle, vk::ShaderStageFlags::COMPUTE, None, None);
         let image_descriptor_set_layouts = vec![image_descriptor_set_layout];
         let image_descriptor = descriptor_set_allocator.allocate(&device.handle, &image_descriptor_set_layouts);
-        Self::update_sets(&device.handle, image.view, image_descriptor.clone());
+        Self::update_sets(&device.handle, image.view, image_descriptor);
 
         let compute_shader = pipeline::load_shader_module(&device.handle, pipeline::GRADIENT_SHADER, None);
-        let compute_pipeline_layout = pipeline::create_pipeline_layout(&device.handle, &image_descriptor_set_layouts);
-        let compute_pipeline = pipeline::create_compute_pipeline(&device.handle, compute_shader.clone(), compute_pipeline_layout);
+        let compute_pipeline_layout = pipeline::create_pipeline_layout(&device.handle, &image_descriptor_set_layouts, None);
+        let compute_pipeline = pipeline::create_compute_pipeline(&device.handle, compute_shader, compute_pipeline_layout);
 
         Self {
             buffering: settings.buffering,
@@ -123,7 +123,7 @@ impl<'a> DrawManager {
         unsafe { 
             device_handle.destroy_shader_module(self.compute_shader, None);
             device_handle.destroy_pipeline_layout(self.compute_pipeline_layout, None);
-            device_handle.destroy_pipeline(self.compute_pipeline.clone(), None);
+            device_handle.destroy_pipeline(self.compute_pipeline, None);
             self.frames.iter_mut().for_each(|frame| frame.drop(device_handle));
             device_handle.destroy_descriptor_set_layout(self.image_descriptor_set_layout, None);
         };
@@ -223,7 +223,7 @@ impl RendererTrait for Renderer {
         let device = Device::new(&instance.handle, &surface);
         let (swapchain, surface_support) = Swapchain::new(&instance, &device, &surface, &settings.resolution).expect("koi::ren::vk - failed to create Swapchain");
 
-        let mut resource_allocator = ResourceAllocator::new(instance.handle.clone(), device.handle.clone(), device.physical_device.clone(), &settings);
+        let mut resource_allocator = ResourceAllocator::new(instance.handle.clone(), device.handle.clone(), device.physical_device, &settings);
         
         let pool_sizes = vec![DescriptorSetPoolSizeRatio::new(vk::DescriptorType::STORAGE_IMAGE, 1.0)];
         let mut descriptor_set_allocator = DescriptorSetAllocator::new(&device.handle, 10, &pool_sizes);
@@ -265,7 +265,7 @@ impl RendererTrait for Renderer {
         let swapchain_semaphore = swapchain_semaphore.clone();
 
         // wait until GPU is done rendering the last frame; 1s timeout
-        let fences: [vk::Fence; 1] = [render_fence.clone()];
+        let fences: [vk::Fence; 1] = [render_fence];
         unsafe { 
             device_handle.wait_for_fences(&fences, true, SECOND_IN_NS).expect("koi::ren::vk - failed to wait for Render Fence");
             device_handle.reset_fences(&fences).expect("koi::ren::vk - failed to reset Render Fence");

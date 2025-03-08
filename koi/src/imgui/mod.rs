@@ -17,11 +17,11 @@ pub trait ImGuiRendering {
 }
 
 impl ImGuiRenderer {
-    pub fn new(ren: &mut Renderer) -> Self {
+    pub fn new(context: &mut imgui::Context, ren: &mut Renderer) -> Self {
         #[cfg(feature = "directx")]
-        let api = ren::api::dx::imgui::Renderer::new(&mut ren.api);
+        let api = ren::api::dx::imgui::Renderer::new(context, &mut ren.api);
         #[cfg(feature = "vulkan")]
-        let api = ren::api::vk::imgui::Renderer::new(&mut ren.api);
+        let api = ren::api::vk::imgui::Renderer::new(context, &mut ren.api);
 
         Self { api }
     }
@@ -47,7 +47,7 @@ impl ImGui {
 
         platform.attach_window(context.io_mut(), window_handle, HiDpiMode::Default);
 
-        let renderer = ImGuiRenderer::new(ren);
+        let renderer = ImGuiRenderer::new(&mut context, ren);
 
         Self { 
             context,

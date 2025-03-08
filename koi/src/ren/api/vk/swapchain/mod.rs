@@ -71,7 +71,7 @@ impl Swapchain {
             let create_info = vk::ImageViewCreateInfo::default()
                 .image(swapchain_image.clone())
                 .view_type(vk::ImageViewType::TYPE_2D)
-                .format(surface_format.format.clone())
+                .format(surface_format.format)
                 .components(
                     vk::ComponentMapping::default()
                         .r(vk::ComponentSwizzle::IDENTITY)

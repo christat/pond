@@ -12,9 +12,10 @@ pub fn load_shader_module(device_handle: &DeviceHandle, shader: &[u8], flags: Op
     unsafe { device_handle.create_shader_module(&create_info, None).expect("koi::ren::vk::pipeline - failed to create shader module") }
 }
 
-pub fn create_pipeline_layout(device_handle: &DeviceHandle, set_layouts: &[vk::DescriptorSetLayout]) -> vk::PipelineLayout {
+pub fn create_pipeline_layout(device_handle: &DeviceHandle, set_layouts: &[vk::DescriptorSetLayout], push_constant_ranges: Option<&[vk::PushConstantRange]>) -> vk::PipelineLayout {
     let create_info = vk::PipelineLayoutCreateInfo::default()
-        .set_layouts(set_layouts);
+        .set_layouts(set_layouts)
+        .push_constant_ranges(push_constant_ranges.unwrap_or_default());
 
     unsafe { device_handle.create_pipeline_layout(&create_info, None).expect("koi::ren::vk::pipeline - failed to create pipeline layout") }
 }

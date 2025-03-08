@@ -1,6 +1,6 @@
 pub mod config;
 
-use config::{PhysicalDeviceQueueFamilies, QueueFamilyType};
+use config::{PhysicalDeviceProperties, PhysicalDeviceQueueFamilies, QueueFamilyType};
 use crate::traits;
 use super::surface::Surface;
 
@@ -9,6 +9,7 @@ use ash::{vk, Device as DeviceHandle, Instance};
 #[allow(unused)]
 pub struct Device {
     pub physical_device: vk::PhysicalDevice,
+    pub physical_device_properties: PhysicalDeviceProperties,
     pub queue_families: PhysicalDeviceQueueFamilies,
     pub handle: DeviceHandle,
 }
@@ -44,6 +45,7 @@ impl Device {
         
         Self {
             physical_device: selected_physical_device.handle,
+            physical_device_properties: selected_physical_device.properties.clone(),
             queue_families: selected_physical_device.queue_families.clone(),
             handle: device,
         }

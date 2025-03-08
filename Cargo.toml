@@ -3,5 +3,6 @@ resolver = "2"
 members = [
     "game",
     "koi",
-    "shaders/gradient"
+    "shaders/imgui",
+    "shaders/gradient",
 ]

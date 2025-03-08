@@ -20,9 +20,21 @@ pub enum DeviceConfigError<'a> {
     QueueFamilyNotSupported(&'a CStr),
 }
 
-#[derive(PartialEq, Eq, PartialOrd)]
+#[derive(Debug)]
+pub enum MemoryPropertiesError {
+    MemoryTypeNotFound
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd)]
+pub struct MemoryType {
+    index: u32,
+    flags: vk::MemoryPropertyFlags,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd)]
 pub struct PhysicalDeviceProperties {
-    pub max_image_dimension_2d: u32
+    pub max_image_dimension_2d: u32,
+    memory_types: Vec<MemoryType>,
 }
 
 impl Ord for PhysicalDeviceProperties {
@@ -32,8 +44,19 @@ impl Ord for PhysicalDeviceProperties {
 }
 
 impl PhysicalDeviceProperties {
-    pub fn new(properties: &vk::PhysicalDeviceProperties) -> Self {
-        Self { max_image_dimension_2d: properties.limits.max_image_dimension2_d }
+    pub fn new(properties: &vk::PhysicalDeviceProperties, memory_properties: &vk::PhysicalDeviceMemoryProperties) -> Self {
+        let memory_types = memory_properties.memory_types_as_slice().iter().map(|memtype| MemoryType { index: memtype.heap_index, flags: memtype.property_flags }).collect();
+        Self { 
+            max_image_dimension_2d: properties.limits.max_image_dimension2_d,
+            memory_types,
+        }
+    }
+
+    pub fn get_memory_type_index(&self, flags: vk::MemoryPropertyFlags) -> Result<u32, MemoryPropertiesError> {
+        match self.memory_types.iter().find(|memory_type| memory_type.flags.contains(flags)) {
+            Some(memory_type) => Ok(memory_type.index),
+            None => Err(MemoryPropertiesError::MemoryTypeNotFound),
+        }
     }
 }
 
@@ -89,10 +112,10 @@ impl Ord for ValidPhysicalDevice {
 }
 
 impl ValidPhysicalDevice {
-    pub fn new(handle: vk::PhysicalDevice, properties: &vk::PhysicalDeviceProperties, queue_families: PhysicalDeviceQueueFamilies, ) -> Self {
+    pub fn new(handle: vk::PhysicalDevice, properties: &vk::PhysicalDeviceProperties, memory_properties: &vk::PhysicalDeviceMemoryProperties, queue_families: PhysicalDeviceQueueFamilies) -> Self {
         Self {
             handle,
-            properties: PhysicalDeviceProperties::new(properties),
+            properties: PhysicalDeviceProperties::new(properties, memory_properties),
             queue_families,
         }
     }
@@ -137,13 +160,14 @@ impl DeviceConfig<'_> {
 
 pub fn validate_physical_device<'a>(instance: &'a Instance, physical_device: vk::PhysicalDevice, surface: &Surface) -> Result<ValidPhysicalDevice, DeviceConfigError<'a>> {
     let properties = unsafe { instance.get_physical_device_properties(physical_device) };
+    let memory_properties = unsafe { instance.get_physical_device_memory_properties(physical_device) };
     
     if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU { return Err(DeviceConfigError::PropertyNotFulfilled(c"discrete_gpu")) }
 
     validate_physical_device_feature_requirements(instance, physical_device)?;
     let queue_families = validate_physical_device_queue_families(instance, physical_device, surface)?;
 
-    Ok(ValidPhysicalDevice::new(physical_device, &properties, queue_families))
+    Ok(ValidPhysicalDevice::new(physical_device, &properties, &memory_properties, queue_families))
 }
 
 fn validate_extensions<'a>(instance: &Instance, physical_device: vk::PhysicalDevice, extensions: &[&'a CStr]) -> Result<(), DeviceConfigError<'a>> {

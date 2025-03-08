@@ -5,7 +5,7 @@ use gpu_allocator::vulkan as vka;
 use std::collections::VecDeque;
 
 pub struct AllocatedResources {
-    images: VecDeque<(vk::Image, vk::ImageView, vka::Allocation)>
+    pub images: VecDeque<(vk::Image, vk::ImageView, vka::Allocation)>
 }
 
 impl AllocatedResources {
