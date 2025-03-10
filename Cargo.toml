@@ -6,3 +6,6 @@ members = [
     "shaders/imgui",
     "shaders/gradient",
 ]
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))', 'cfg(spirv, values("vertex", "fragment", "compute"))'] }

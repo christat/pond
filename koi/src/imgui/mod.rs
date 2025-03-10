@@ -1,7 +1,7 @@
 use crate::ren::{self, Handle as Renderer, api::vk::Renderer as vkRenderer};
 
 use imgui::Context;
-use imgui_winit_support::{WinitPlatform, HiDpiMode};
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::time::Instant;
 use winit::window::Window as WindowHandle;
 
@@ -25,7 +25,12 @@ impl ImGuiRenderer {
     }
 
     #[cfg(feature = "vulkan")]
-    pub fn draw(&mut self, context: &mut imgui::Context, api: &mut vkRenderer, command_buffer: ash::vk::CommandBuffer) {
+    pub fn draw(
+        &mut self,
+        context: &mut imgui::Context,
+        api: &mut vkRenderer,
+        command_buffer: ash::vk::CommandBuffer,
+    ) {
         self.api.draw(context, api, command_buffer);
     }
 
@@ -53,22 +58,29 @@ impl ImGui {
 
         let renderer = ImGuiRenderer::new(&mut context, ren, IMGUI_DEFAULT_IMAGE_COUNT);
 
-        Self { 
+        Self {
             context,
             platform,
             renderer,
             open: false,
-            now: Instant::now()
+            now: Instant::now(),
         }
     }
 
-    pub fn handle_window_event(&mut self, window_handle: &WindowHandle, event: &winit::event::WindowEvent) {
-        self.platform.handle_window_event(self.context.io_mut(), window_handle, event);
+    pub fn handle_window_event(
+        &mut self,
+        window_handle: &WindowHandle,
+        event: &winit::event::WindowEvent,
+    ) {
+        self.platform
+            .handle_window_event(self.context.io_mut(), window_handle, event);
     }
 
     pub fn update(&mut self, window_handle: &WindowHandle) {
         self.tick();
-        self.platform.prepare_frame(self.context.io_mut(), &window_handle).expect("koi::imgui - failed to prepare ImGui frame");
+        self.platform
+            .prepare_frame(self.context.io_mut(), &window_handle)
+            .expect("koi::imgui - failed to prepare ImGui frame");
 
         let ui = self.context.frame();
         ui.show_demo_window(&mut self.open);

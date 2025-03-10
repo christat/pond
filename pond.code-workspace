@@ -5,6 +5,10 @@
 		}
 	],
 	"settings": {
-		"lldb.script": { "lang.rust.toolchain": "stable-x86_64-pc-windows-gnu" }
+		"lldb.script": { "lang.rust.toolchain": "stable-x86_64-pc-windows-gnu" },
+		"[rust]": {
+			"editor.defaultFormatter": "rust-lang.rust-analyzer",
+			"editor.formatOnSave": true
+		}
 	}
 }

@@ -1,6 +1,6 @@
 use crate::ren::settings::Settings;
 
-use ash::{vk, Device as DeviceHandle, Instance as InstanceHandle};
+use ash::{Device as DeviceHandle, Instance as InstanceHandle, vk};
 use gpu_allocator::vulkan as vka;
 use std::collections::VecDeque;
 
@@ -17,7 +17,12 @@ impl AllocatedResources {
         }
     }
 
-    pub fn add_image(&mut self, image: vk::Image, view: vk::ImageView, allocation: vka::Allocation) {
+    pub fn add_image(
+        &mut self,
+        image: vk::Image,
+        view: vk::ImageView,
+        allocation: vka::Allocation,
+    ) {
         self.images.push_back((image, view, allocation));
     }
 
@@ -30,14 +35,18 @@ impl AllocatedResources {
             let (image, view, allocation) = self.images.pop_front().unwrap();
             unsafe {
                 device.destroy_image_view(view, None);
-                allocator.free(allocation).expect("koi::vk::allocator - failed to free Image Allocation");
                 device.destroy_image(image, None);
+                allocator
+                    .free(allocation)
+                    .expect("koi::vk::allocator - failed to free Image Allocation");
             }
         }
         while !self.buffers.is_empty() {
             let (buffer, allocation) = self.buffers.pop_front().unwrap();
             unsafe { device.destroy_buffer(buffer, None) };
-            allocator.free(allocation).expect("koi::vk::allocator - failed to free Buffer Allocation");
+            allocator
+                .free(allocation)
+                .expect("koi::vk::allocator - failed to free Buffer Allocation");
         }
     }
 }
@@ -50,22 +59,41 @@ pub struct ResourceAllocator {
 
 #[allow(unused)]
 impl ResourceAllocator {
-    pub fn new(instance: InstanceHandle, device: DeviceHandle, physical_device: vk::PhysicalDevice, settings: &Settings) -> Self {
+    pub fn new(
+        instance: InstanceHandle,
+        device: DeviceHandle,
+        physical_device: vk::PhysicalDevice,
+        settings: &Settings,
+    ) -> Self {
         let handle = vka::Allocator::new(&vka::AllocatorCreateDesc {
             instance,
             device,
             physical_device,
             debug_settings: Default::default(),
             buffer_device_address: true,
-            allocation_sizes: Default::default()
-        }).expect("koi::ren::vk::allocator - failed to create Allocator");
+            allocation_sizes: Default::default(),
+        })
+        .expect("koi::ren::vk::allocator - failed to create Allocator");
 
-        let frame_resources = (0..settings.buffering).into_iter().map(|_| AllocatedResources::new()).collect();
+        let frame_resources = (0..settings.buffering)
+            .into_iter()
+            .map(|_| AllocatedResources::new())
+            .collect();
 
-        Self { handle, frame_resources, global_resources: AllocatedResources::new() }
+        Self {
+            handle,
+            frame_resources,
+            global_resources: AllocatedResources::new(),
+        }
     }
 
-    pub fn add_image(&mut self, frame: Option<usize>, image: vk::Image, view: vk::ImageView, allocation: vka::Allocation) {
+    pub fn add_image(
+        &mut self,
+        frame: Option<usize>,
+        image: vk::Image,
+        view: vk::ImageView,
+        allocation: vka::Allocation,
+    ) {
         match frame {
             Some(index) => self.frame_resources[index].add_image(image, view, allocation),
             None => self.global_resources.add_image(image, view, allocation),
@@ -77,7 +105,9 @@ impl ResourceAllocator {
     }
 
     pub fn drop(&mut self, device: &DeviceHandle) {
-        self.frame_resources.iter_mut().for_each(|handle| handle.drop(device, &mut self.handle));
+        self.frame_resources
+            .iter_mut()
+            .for_each(|handle| handle.drop(device, &mut self.handle));
         self.global_resources.drop(device, &mut self.handle);
         self.handle.report_memory_leaks(log::Level::Error);
     }

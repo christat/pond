@@ -9,7 +9,5 @@ impl RendererTrait for Renderer {
         Self {}
     }
 
-    fn draw(&mut self) {
-        
-    }
+    fn draw(&mut self) {}
 }

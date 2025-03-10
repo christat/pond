@@ -5,14 +5,17 @@ pub struct Resolution {
 
 impl Default for Resolution {
     fn default() -> Self {
-        Self{ width: 1920, height: 1080 }
+        Self {
+            width: 1920,
+            height: 1080,
+        }
     }
 }
 
 #[allow(unused)]
 impl Resolution {
     pub fn new(width: u32, height: u32) -> Self {
-        Self{ width, height }
+        Self { width, height }
     }
 }
 
@@ -34,4 +37,3 @@ impl Settings {
         self
     }
 }
-

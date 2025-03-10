@@ -1,5 +1,9 @@
-use std::{collections::HashSet, ffi::{c_char, CStr}, u32};
-use ash::{khr, vk, Instance};
+use ash::{Instance, khr, vk};
+use std::{
+    collections::HashSet,
+    ffi::{CStr, c_char},
+    u32,
+};
 
 use crate::ren::api::vk::surface::Surface;
 
@@ -22,7 +26,7 @@ pub enum DeviceConfigError<'a> {
 
 #[derive(Debug)]
 pub enum MemoryPropertiesError {
-    MemoryTypeNotFound
+    MemoryTypeNotFound,
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd)]
@@ -40,22 +44,41 @@ pub struct PhysicalDeviceProperties {
 
 impl Ord for PhysicalDeviceProperties {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        other.max_image_dimension_2d.cmp(&self.max_image_dimension_2d)
+        other
+            .max_image_dimension_2d
+            .cmp(&self.max_image_dimension_2d)
     }
 }
 
 impl PhysicalDeviceProperties {
-    pub fn new(properties: &vk::PhysicalDeviceProperties, memory_properties: &vk::PhysicalDeviceMemoryProperties) -> Self {
-        let memory_types = memory_properties.memory_types_as_slice().iter().map(|memtype| MemoryType { index: memtype.heap_index, flags: memtype.property_flags }).collect();
-        Self { 
+    pub fn new(
+        properties: &vk::PhysicalDeviceProperties,
+        memory_properties: &vk::PhysicalDeviceMemoryProperties,
+    ) -> Self {
+        let memory_types = memory_properties
+            .memory_types_as_slice()
+            .iter()
+            .map(|memtype| MemoryType {
+                index: memtype.heap_index,
+                flags: memtype.property_flags,
+            })
+            .collect();
+        Self {
             max_image_dimension_2d: properties.limits.max_image_dimension2_d,
             min_memory_map_alignment: properties.limits.min_memory_map_alignment,
             memory_types,
         }
     }
 
-    pub fn get_memory_type_index(&self, flags: vk::MemoryPropertyFlags) -> Result<u32, MemoryPropertiesError> {
-        match self.memory_types.iter().find(|memory_type| memory_type.flags.contains(flags)) {
+    pub fn get_memory_type_index(
+        &self,
+        flags: vk::MemoryPropertyFlags,
+    ) -> Result<u32, MemoryPropertiesError> {
+        match self
+            .memory_types
+            .iter()
+            .find(|memory_type| memory_type.flags.contains(flags))
+        {
             Some(memory_type) => Ok(memory_type.index),
             None => Err(MemoryPropertiesError::MemoryTypeNotFound),
         }
@@ -65,7 +88,7 @@ impl PhysicalDeviceProperties {
 #[allow(unused)]
 pub enum QueueFamilyType {
     Graphics,
-    Present
+    Present,
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd)]
@@ -88,14 +111,18 @@ impl PhysicalDeviceQueueFamilies {
     pub fn get_family_index(&self, family_type: QueueFamilyType) -> u32 {
         match family_type {
             QueueFamilyType::Graphics => self.graphics_family_index.unwrap_or(u32::MAX),
-            QueueFamilyType::Present => self.present_family_index.unwrap_or(u32::MAX)
+            QueueFamilyType::Present => self.present_family_index.unwrap_or(u32::MAX),
         }
     }
 
     pub fn get_unique_indices(&self) -> Vec<u32> {
         let mut unique_indices = HashSet::new();
-        if self.graphics_family_index.is_some() { unique_indices.insert(self.graphics_family_index.unwrap()); }
-        if self.present_family_index.is_some() { unique_indices.insert(self.present_family_index.unwrap()); }
+        if self.graphics_family_index.is_some() {
+            unique_indices.insert(self.graphics_family_index.unwrap());
+        }
+        if self.present_family_index.is_some() {
+            unique_indices.insert(self.present_family_index.unwrap());
+        }
         unique_indices.into_iter().collect()
     }
 }
@@ -114,7 +141,12 @@ impl Ord for ValidPhysicalDevice {
 }
 
 impl ValidPhysicalDevice {
-    pub fn new(handle: vk::PhysicalDevice, properties: &vk::PhysicalDeviceProperties, memory_properties: &vk::PhysicalDeviceMemoryProperties, queue_families: PhysicalDeviceQueueFamilies) -> Self {
+    pub fn new(
+        handle: vk::PhysicalDevice,
+        properties: &vk::PhysicalDeviceProperties,
+        memory_properties: &vk::PhysicalDeviceMemoryProperties,
+        queue_families: PhysicalDeviceQueueFamilies,
+    ) -> Self {
         Self {
             handle,
             properties: PhysicalDeviceProperties::new(properties, memory_properties),
@@ -124,12 +156,12 @@ impl ValidPhysicalDevice {
 }
 
 impl DeviceConfig<'_> {
-    pub fn new<'a>(instance: &Instance, valid_physical_device: &ValidPhysicalDevice) -> Result<Self, DeviceConfigError<'a>> {
-        let extensions = vec![
-            khr::swapchain::NAME,
-            khr::dynamic_rendering::NAME,
-        ];
-        
+    pub fn new<'a>(
+        instance: &Instance,
+        valid_physical_device: &ValidPhysicalDevice,
+    ) -> Result<Self, DeviceConfigError<'a>> {
+        let extensions = vec![khr::swapchain::NAME, khr::dynamic_rendering::NAME];
+
         validate_extensions(instance, valid_physical_device.handle, &extensions)?;
 
         let mut features: vk::PhysicalDeviceFeatures = Default::default();
@@ -143,7 +175,9 @@ impl DeviceConfig<'_> {
         vk_12_features.buffer_device_address = vk::TRUE;
         vk_12_features.descriptor_indexing = vk::TRUE;
 
-        let queue_create_infos = valid_physical_device.queue_families.get_unique_indices()
+        let queue_create_infos = valid_physical_device
+            .queue_families
+            .get_unique_indices()
             .into_iter()
             .map(|index| {
                 vk::DeviceQueueCreateInfo::default()
@@ -152,40 +186,83 @@ impl DeviceConfig<'_> {
             })
             .collect();
 
-        Ok(Self { extensions, features, vk_13_features, vk_12_features, queue_create_infos })
+        Ok(Self {
+            extensions,
+            features,
+            vk_13_features,
+            vk_12_features,
+            queue_create_infos,
+        })
     }
 
     pub fn get_extensions(&self) -> Vec<*const c_char> {
-        self.extensions.iter().map(|extension| {extension.as_ptr()}).collect()
+        self.extensions
+            .iter()
+            .map(|extension| extension.as_ptr())
+            .collect()
     }
 }
 
-pub fn validate_physical_device<'a>(instance: &'a Instance, physical_device: vk::PhysicalDevice, surface: &Surface) -> Result<ValidPhysicalDevice, DeviceConfigError<'a>> {
+pub fn validate_physical_device<'a>(
+    instance: &'a Instance,
+    physical_device: vk::PhysicalDevice,
+    surface: &Surface,
+) -> Result<ValidPhysicalDevice, DeviceConfigError<'a>> {
     let properties = unsafe { instance.get_physical_device_properties(physical_device) };
-    let memory_properties = unsafe { instance.get_physical_device_memory_properties(physical_device) };
-    
-    if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU { return Err(DeviceConfigError::PropertyNotFulfilled(c"discrete_gpu")) }
+    let memory_properties =
+        unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
+    if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU {
+        return Err(DeviceConfigError::PropertyNotFulfilled(c"discrete_gpu"));
+    }
 
     validate_physical_device_feature_requirements(instance, physical_device)?;
-    let queue_families = validate_physical_device_queue_families(instance, physical_device, surface)?;
+    let queue_families =
+        validate_physical_device_queue_families(instance, physical_device, surface)?;
 
-    Ok(ValidPhysicalDevice::new(physical_device, &properties, &memory_properties, queue_families))
+    Ok(ValidPhysicalDevice::new(
+        physical_device,
+        &properties,
+        &memory_properties,
+        queue_families,
+    ))
 }
 
-fn validate_extensions<'a>(instance: &Instance, physical_device: vk::PhysicalDevice, extensions: &[&'a CStr]) -> Result<(), DeviceConfigError<'a>> {
-    let device_extension_properties = unsafe { instance.enumerate_device_extension_properties(physical_device).expect("koi::ren::vk::device::Config - failed to enumerate device extension properties") };
-    
-    fn validate_extension<'b>(extension: &'b CStr, available_extensions: &[vk::ExtensionProperties]) -> Result<(), DeviceConfigError<'b>> {
-        match available_extensions.iter().any(|extensions_property| extensions_property.extension_name_as_c_str().unwrap() == extension) {
+fn validate_extensions<'a>(
+    instance: &Instance,
+    physical_device: vk::PhysicalDevice,
+    extensions: &[&'a CStr],
+) -> Result<(), DeviceConfigError<'a>> {
+    let device_extension_properties = unsafe {
+        instance
+            .enumerate_device_extension_properties(physical_device)
+            .expect(
+                "koi::ren::vk::device::Config - failed to enumerate device extension properties",
+            )
+    };
+
+    fn validate_extension<'b>(
+        extension: &'b CStr,
+        available_extensions: &[vk::ExtensionProperties],
+    ) -> Result<(), DeviceConfigError<'b>> {
+        match available_extensions.iter().any(|extensions_property| {
+            extensions_property.extension_name_as_c_str().unwrap() == extension
+        }) {
             true => Ok(()),
-            false => Err(DeviceConfigError::ExtensionNotSupported(extension))
+            false => Err(DeviceConfigError::ExtensionNotSupported(extension)),
         }
     }
 
-    extensions.iter().map(|extension| validate_extension(extension, &device_extension_properties)).collect()
+    extensions
+        .iter()
+        .map(|extension| validate_extension(extension, &device_extension_properties))
+        .collect()
 }
 
-fn validate_physical_device_feature_requirements(instance: &Instance, physical_device: vk::PhysicalDevice) -> Result<(), DeviceConfigError> {
+fn validate_physical_device_feature_requirements(
+    instance: &Instance,
+    physical_device: vk::PhysicalDevice,
+) -> Result<(), DeviceConfigError> {
     // NB! C-style pattern of feeding-in blank struct refs
     let mut vk_13_features: vk::PhysicalDeviceVulkan13Features = Default::default();
     let mut vk_12_features: vk::PhysicalDeviceVulkan12Features = Default::default();
@@ -195,23 +272,45 @@ fn validate_physical_device_feature_requirements(instance: &Instance, physical_d
 
     unsafe { instance.get_physical_device_features2(physical_device, &mut features_2) };
 
-    if features_2.features.geometry_shader == vk::FALSE { return Err(DeviceConfigError::FeatureNotSupported(c"geometry_shader")) }
-    if vk_13_features.dynamic_rendering == vk::FALSE { return Err(DeviceConfigError::FeatureNotSupported(c"vk_13_dynamic_rendering")) }
-    if vk_13_features.synchronization2 == vk::FALSE { return Err(DeviceConfigError::FeatureNotSupported(c"vk_13_synchronization2")) }
-    if vk_12_features.buffer_device_address == vk::FALSE { return Err(DeviceConfigError::FeatureNotSupported(c"vk_12_buffer_device_address")) }
-    if vk_12_features.descriptor_indexing == vk::FALSE { return Err(DeviceConfigError::FeatureNotSupported(c"vk_12_descriptor_indexing")) }
+    if features_2.features.geometry_shader == vk::FALSE {
+        return Err(DeviceConfigError::FeatureNotSupported(c"geometry_shader"));
+    }
+    if vk_13_features.dynamic_rendering == vk::FALSE {
+        return Err(DeviceConfigError::FeatureNotSupported(
+            c"vk_13_dynamic_rendering",
+        ));
+    }
+    if vk_13_features.synchronization2 == vk::FALSE {
+        return Err(DeviceConfigError::FeatureNotSupported(
+            c"vk_13_synchronization2",
+        ));
+    }
+    if vk_12_features.buffer_device_address == vk::FALSE {
+        return Err(DeviceConfigError::FeatureNotSupported(
+            c"vk_12_buffer_device_address",
+        ));
+    }
+    if vk_12_features.descriptor_indexing == vk::FALSE {
+        return Err(DeviceConfigError::FeatureNotSupported(
+            c"vk_12_descriptor_indexing",
+        ));
+    }
     Ok(())
 }
 
-fn validate_physical_device_queue_families<'a>(instance: &Instance, physical_device: vk::PhysicalDevice, surface: &Surface) -> Result<PhysicalDeviceQueueFamilies, DeviceConfigError<'a>> {
-    let queue_family_properties = unsafe{ instance.get_physical_device_queue_family_properties(physical_device) } ;
+fn validate_physical_device_queue_families<'a>(
+    instance: &Instance,
+    physical_device: vk::PhysicalDevice,
+    surface: &Surface,
+) -> Result<PhysicalDeviceQueueFamilies, DeviceConfigError<'a>> {
+    let queue_family_properties =
+        unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
 
     let physical_device_queue_families = queue_family_properties.iter().enumerate()
         .fold(PhysicalDeviceQueueFamilies::new(), |mut fold, (queue_family_index, family)| {
             let qfi = queue_family_index as u32;
             if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) && fold.graphics_family_index.is_none() {
                 fold.graphics_family_index = Some(qfi);
-                
             }
             if fold.present_family_index.is_none() {
                 if unsafe { surface.instance.get_physical_device_surface_support(physical_device, qfi, surface.khr).expect("koi::ren::vk::device::Config - failed to get physical device surface support check") } {
@@ -222,8 +321,18 @@ fn validate_physical_device_queue_families<'a>(instance: &Instance, physical_dev
             fold
         });
 
-    if physical_device_queue_families.graphics_family_index.is_none() { return Err(DeviceConfigError::QueueFamilyNotSupported(c"graphics")); }
-    if physical_device_queue_families.present_family_index.is_none() { return Err(DeviceConfigError::QueueFamilyNotSupported(c"transfer")); }
+    if physical_device_queue_families
+        .graphics_family_index
+        .is_none()
+    {
+        return Err(DeviceConfigError::QueueFamilyNotSupported(c"graphics"));
+    }
+    if physical_device_queue_families
+        .present_family_index
+        .is_none()
+    {
+        return Err(DeviceConfigError::QueueFamilyNotSupported(c"transfer"));
+    }
 
     Ok(physical_device_queue_families)
 }

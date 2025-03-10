@@ -7,15 +7,12 @@ pub struct Info<'a> {
     pub engine_version: u32,
 }
 
-pub fn new(
-    app_name: &CStr,
-    app_version: u32,
-) -> Info {
+pub fn new(app_name: &CStr, app_version: u32) -> Info {
     Info {
         app_name: app_name,
         app_version: app_version,
         engine_name: c"koi",
-        engine_version: make_version(0, 1, 0, 0)
+        engine_version: make_version(0, 1, 0, 0),
     }
 }
 
