@@ -18,7 +18,8 @@ impl Runtime {
     }
 
     fn update(&mut self) {
-        self.ren.draw();
+        self.imgui.update(&self.window);
+        self.ren.draw(&mut self.imgui);
         self.window.request_redraw();
     }
 }

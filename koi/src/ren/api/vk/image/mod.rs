@@ -13,24 +13,23 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new(
+    pub fn create(
         device_handle: &DeviceHandle,
         allocator: &mut vka::Allocator,
-        resources: &mut AllocatedResources,
         format: vk::Format,
         extent: vk::Extent3D,
         usage: vk::ImageUsageFlags,
         aspect_mask: vk::ImageAspectFlags
-    ) -> Self {
+    ) -> (Self, vka::Allocation) {
         let image_create_info = vk::ImageCreateInfo::default()
-            .image_type(vk::ImageType::TYPE_2D)
-            .format(format)
-            .extent(extent)
-            .mip_levels(1)
-            .array_layers(1)
-            .samples(vk::SampleCountFlags::TYPE_1)
-            .tiling(vk::ImageTiling::OPTIMAL)
-            .usage(usage);
+        .image_type(vk::ImageType::TYPE_2D)
+        .format(format)
+        .extent(extent)
+        .mip_levels(1)
+        .array_layers(1)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .tiling(vk::ImageTiling::OPTIMAL)
+        .usage(usage);
 
         let image = unsafe { device_handle.create_image(&image_create_info, None).expect("koi::vk::Image - failed to create Image") };
         let requirements = unsafe { device_handle.get_image_memory_requirements(image) };
@@ -60,13 +59,25 @@ impl Image {
         
         let view = unsafe { device_handle.create_image_view(&view_create_info, None).expect("koi::vk::Image - failed to create Image View") };
 
-        resources.add_image(image, view, allocation);
-
         let extent_2d = vk::Extent2D::default()
             .width(extent.width)
             .height(extent.height);
 
-        Self { handle: image, view, extent_3d: extent, extent_2d, format }
+        (Self { handle: image, view, extent_3d: extent, extent_2d, format }, allocation)
+    }
+
+    pub fn new(
+        device_handle: &DeviceHandle,
+        allocator: &mut vka::Allocator,
+        resources: &mut AllocatedResources,
+        format: vk::Format,
+        extent: vk::Extent3D,
+        usage: vk::ImageUsageFlags,
+        aspect_mask: vk::ImageAspectFlags
+    ) -> Self {
+        let(image, allocation) = Self::create(device_handle, allocator, format, extent, usage, aspect_mask);
+        resources.add_image(image.handle, image.view, allocation);
+        image
     }
 }
 

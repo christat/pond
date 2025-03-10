@@ -58,6 +58,10 @@ impl Device {
         };
         unsafe { self.handle.get_device_queue(queue_family_index, 0) }
     }
+
+    pub fn get_min_memory_map_alignment(&self) -> usize {
+        self.physical_device_properties.min_memory_map_alignment
+    }
 }
 
 impl traits::Drop for Device {

@@ -5,18 +5,24 @@ use gpu_allocator::vulkan as vka;
 use std::collections::VecDeque;
 
 pub struct AllocatedResources {
-    pub images: VecDeque<(vk::Image, vk::ImageView, vka::Allocation)>
+    pub images: VecDeque<(vk::Image, vk::ImageView, vka::Allocation)>,
+    pub buffers: VecDeque<(vk::Buffer, vka::Allocation)>,
 }
 
 impl AllocatedResources {
     pub fn new() -> Self {
         Self {
             images: VecDeque::new(),
+            buffers: VecDeque::new(),
         }
     }
 
     pub fn add_image(&mut self, image: vk::Image, view: vk::ImageView, allocation: vka::Allocation) {
         self.images.push_back((image, view, allocation));
+    }
+
+    pub fn add_buffer(&mut self, buffer: vk::Buffer, allocation: vka::Allocation) {
+        self.buffers.push_back((buffer, allocation));
     }
 
     pub fn drop(&mut self, device: &DeviceHandle, allocator: &mut vka::Allocator) {
@@ -27,6 +33,11 @@ impl AllocatedResources {
                 allocator.free(allocation).expect("koi::vk::allocator - failed to free Image Allocation");
                 device.destroy_image(image, None);
             }
+        }
+        while !self.buffers.is_empty() {
+            let (buffer, allocation) = self.buffers.pop_front().unwrap();
+            unsafe { device.destroy_buffer(buffer, None) };
+            allocator.free(allocation).expect("koi::vk::allocator - failed to free Buffer Allocation");
         }
     }
 }
@@ -47,7 +58,7 @@ impl ResourceAllocator {
             debug_settings: Default::default(),
             buffer_device_address: true,
             allocation_sizes: Default::default()
-        }).expect("koi::ren::vk - failed to create Allocator");
+        }).expect("koi::ren::vk::allocator - failed to create Allocator");
 
         let frame_resources = (0..settings.buffering).into_iter().map(|_| AllocatedResources::new()).collect();
 

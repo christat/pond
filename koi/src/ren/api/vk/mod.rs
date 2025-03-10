@@ -1,3 +1,4 @@
+pub mod buffer;
 pub mod descriptor;
 pub mod device;
 pub mod frame;
@@ -11,7 +12,7 @@ pub mod swapchain;
 
 use std::u64;
 
-use crate::{ren::{settings::Resolution, Info, Renderer as RendererTrait, Settings, Window}, traits::Drop};
+use crate::{imgui::ImGui, ren::{settings::Resolution, Info, Renderer as RendererTrait, Settings, Window}, traits::Drop};
 use resource_allocator::ResourceAllocator;
 use descriptor::{DescriptorSetAllocator, DescriptorSetLayoutBuilder, DescriptorSetPoolSizeRatio};
 use device::{Device, config::QueueFamilyType};
@@ -112,9 +113,7 @@ impl<'a> DrawManager {
     pub fn write_command_buffer(&mut self, device_handle: &DeviceHandle, command_buffer: vk::CommandBuffer) {
         unsafe {
             device_handle.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipeline);
-            let dynamic_offsets = [];
-            let descriptor_sets = [self.image_descriptor];
-            device_handle.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipeline_layout, 0, &descriptor_sets, &dynamic_offsets);
+            device_handle.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE, self.compute_pipeline_layout, 0, &[self.image_descriptor], &[]);
             device_handle.cmd_dispatch(command_buffer, (self.image.extent_2d.width as f32 / 16.0).ceil() as u32, (self.image.extent_2d.height as f32 / 16.0).ceil() as u32, 1);
         };
     }
@@ -130,7 +129,6 @@ impl<'a> DrawManager {
     }
 }
 
-#[allow(unused)]
 pub struct ImmediateManager {
     pub command_pool: vk::CommandPool,
     pub command_buffer: vk::CommandBuffer,
@@ -211,7 +209,20 @@ pub struct Renderer {
     descriptor_set_allocator: DescriptorSetAllocator,
 
     draw_manager: DrawManager,
-    immediate_manager: ImmediateManager,
+    // immediate_manager: ImmediateManager,
+}
+
+impl Renderer {
+    fn draw_imgui(&mut self, imgui: &mut ImGui, command_buffer: vk::CommandBuffer, target: vk::ImageView) {
+        let color_attachments = [pipeline::get_attachment_info(target, vk::ImageLayout::ATTACHMENT_OPTIMAL, None)];
+        let rendering_info = pipeline::get_rendering_info(self.swapchain.extent, &color_attachments, None);
+
+        unsafe { self.device.handle.cmd_begin_rendering(command_buffer, &rendering_info) };
+
+        imgui.draw(self, command_buffer);
+
+        unsafe { self.device.handle.cmd_end_rendering(command_buffer) };
+    }
 }
 
 impl RendererTrait for Renderer {
@@ -230,7 +241,7 @@ impl RendererTrait for Renderer {
         let graphics_queue = device.get_queue(QueueFamilyType::Graphics);
 
         let draw_manager = DrawManager::new(&device, &mut resource_allocator, &mut descriptor_set_allocator, &settings);
-        let immediate_manager = ImmediateManager::new(&device);
+        // let immediate_manager = ImmediateManager::new(&device);
 
         Self { 
             settings,
@@ -248,11 +259,11 @@ impl RendererTrait for Renderer {
             descriptor_set_allocator,
             
             draw_manager,
-            immediate_manager,
+            // immediate_manager,
         }
     }
 
-    fn draw(&mut self) {
+    fn draw(&mut self, imgui: &mut ImGui) {
         const SECOND_IN_NS: u64 = 10e9 as u64;
 
         let device_handle: ash::Device = self.device.handle.clone();
@@ -296,8 +307,12 @@ impl RendererTrait for Renderer {
         image::transition(&device_handle, command_buffer, swapchain_image, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL);
         image::copy(&device_handle, command_buffer, image, swapchain_image, self.draw_manager.image.extent_2d, self.swapchain.extent);
 
+        // transition swapchain to draw imgui; draw on swapchain
+        image::transition(&device_handle, command_buffer, swapchain_image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+        self.draw_imgui(imgui, command_buffer, self.swapchain.image_views[swapchain_image_index as usize]);
+
         // transition swapchain to present
-        image::transition(&device_handle, command_buffer, swapchain_image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::PRESENT_SRC_KHR);
+        image::transition(&device_handle, command_buffer, swapchain_image, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, vk::ImageLayout::PRESENT_SRC_KHR);
         
         // end command buffer
         unsafe { device_handle.end_command_buffer(command_buffer).expect("koi::ren::vk - failed to End current frame Command Buffer") };
@@ -339,7 +354,7 @@ impl RendererTrait for Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe { self.device.handle.device_wait_idle().expect("koi::ren::vk - failed to Wait for Device Idle") };
-        self.immediate_manager.drop(&self.device.handle);
+        // self.immediate_manager.drop(&self.device.handle);
         self.draw_manager.drop(&self.device.handle);
         self.descriptor_set_allocator.drop(&self.device.handle);
         self.resource_allocator.drop(&self.device.handle);

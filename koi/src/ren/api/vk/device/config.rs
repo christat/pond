@@ -34,6 +34,7 @@ pub struct MemoryType {
 #[derive(Clone, PartialEq, Eq, PartialOrd)]
 pub struct PhysicalDeviceProperties {
     pub max_image_dimension_2d: u32,
+    pub min_memory_map_alignment: usize,
     memory_types: Vec<MemoryType>,
 }
 
@@ -48,6 +49,7 @@ impl PhysicalDeviceProperties {
         let memory_types = memory_properties.memory_types_as_slice().iter().map(|memtype| MemoryType { index: memtype.heap_index, flags: memtype.property_flags }).collect();
         Self { 
             max_image_dimension_2d: properties.limits.max_image_dimension2_d,
+            min_memory_map_alignment: properties.limits.min_memory_map_alignment,
             memory_types,
         }
     }
