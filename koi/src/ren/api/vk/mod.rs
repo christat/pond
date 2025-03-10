@@ -14,12 +14,14 @@ use std::u64;
 
 use crate::{
     imgui::ImGui,
+    macros::Convert,
     ren::{Info, Renderer as RendererTrait, Settings, Window, settings::Resolution},
     traits::Drop,
 };
 use descriptor::{DescriptorSetAllocator, DescriptorSetLayoutBuilder, DescriptorSetPoolSizeRatio};
 use device::{Device, config::QueueFamilyType};
 use frame::Frame;
+use glam::Vec4;
 use image::Image;
 use instance::Instance;
 use resource_allocator::ResourceAllocator;
@@ -28,16 +30,64 @@ use swapchain::{SurfaceSupport, Swapchain};
 
 use ash::{Device as DeviceHandle, Entry, vk};
 
+#[derive(Default)]
+pub struct PushConstants {
+    pub data_0: Vec4,
+    pub data_1: Vec4,
+    pub data_2: Vec4,
+    pub data_3: Vec4,
+}
+
+impl PushConstants {
+    #[inline]
+    pub fn data_0(mut self, data_0: Vec4) -> Self {
+        self.data_0 = data_0;
+        self
+    }
+    #[inline]
+    pub fn data_1(mut self, data_1: Vec4) -> Self {
+        self.data_1 = data_1;
+        self
+    }
+    #[inline]
+    pub fn data_2(mut self, data_2: Vec4) -> Self {
+        self.data_2 = data_2;
+        self
+    }
+    pub fn data_3(mut self, data_3: Vec4) -> Self {
+        self.data_3 = data_3;
+        self
+    }
+    pub fn as_buffer(&self) -> [u8; 64] {
+        let data_0_buffer = self.data_0.to_array().convert();
+        let data_1_buffer = self.data_1.to_array().convert();
+        let data_2_buffer = self.data_2.to_array().convert();
+        let data_3_buffer = self.data_3.to_array().convert();
+        [data_0_buffer, data_1_buffer, data_2_buffer, data_3_buffer]
+            .as_flattened()
+            .try_into()
+            .unwrap()
+    }
+}
+
+pub struct ComputeEffect {
+    pub name: String,
+    pub shader: vk::ShaderModule,
+    pub pipeline: vk::Pipeline,
+    pub pipeline_layout: vk::PipelineLayout,
+    pub push_constants: PushConstants,
+}
+
 pub struct DrawManager {
-    buffering: u32,
+    pub buffering: u32,
     pub frames: Vec<Frame>,
     pub image: Image,
     pub image_descriptor_set_layout: vk::DescriptorSetLayout,
     pub image_descriptor: vk::DescriptorSet,
-    pub compute_shader: vk::ShaderModule,
-    pub compute_pipeline_layout: vk::PipelineLayout,
-    pub compute_pipeline: vk::Pipeline,
     pub frame_count: u32,
+
+    pub compute_effects: [ComputeEffect; 2],
+    pub compute_effect_index: usize,
 }
 
 impl<'a> DrawManager {
@@ -76,18 +126,55 @@ impl<'a> DrawManager {
             descriptor_set_allocator.allocate(&device.handle, &image_descriptor_set_layouts);
         Self::update_sets(&device.handle, image.view, image_descriptor);
 
-        let compute_shader = pipeline::load_shader_module(
+        let gradient_shader = pipeline::load_shader_module(
             &device.handle,
             include_bytes!(env!("gradient.spv")),
             None,
         );
-        let compute_pipeline_layout =
-            pipeline::create_pipeline_layout(&device.handle, &image_descriptor_set_layouts, None);
-        let compute_pipeline = pipeline::create_compute_pipeline(
+        let sky_shader =
+            pipeline::load_shader_module(&device.handle, include_bytes!(env!("sky.spv")), None);
+
+        let push_constant_ranges = [vk::PushConstantRange::default()
+            .offset(0)
+            .size(size_of::<PushConstants>() as u32)
+            .stage_flags(vk::ShaderStageFlags::COMPUTE)];
+        let compute_pipeline_layout = pipeline::create_pipeline_layout(
             &device.handle,
-            compute_shader,
-            compute_pipeline_layout,
+            &image_descriptor_set_layouts,
+            Some(&push_constant_ranges),
         );
+        let gradient_pipeline = pipeline::create_compute_pipeline(
+            &device.handle,
+            gradient_shader,
+            compute_pipeline_layout,
+            c"main_cs",
+        );
+        let sky_pipeline = pipeline::create_compute_pipeline(
+            &device.handle,
+            sky_shader,
+            compute_pipeline_layout,
+            c"main_cs",
+        );
+
+        let gradient_effect = ComputeEffect {
+            name: String::from("gradient"),
+            shader: gradient_shader,
+            pipeline: gradient_pipeline,
+            pipeline_layout: compute_pipeline_layout,
+            push_constants: PushConstants::default()
+                .data_0(Vec4::new(1.0, 0.0, 0.0, 1.0))
+                .data_1(Vec4::new(0.0, 0.0, 1.0, 1.0)),
+        };
+
+        let sky_effect = ComputeEffect {
+            name: String::from("sky"),
+            shader: sky_shader,
+            pipeline: sky_pipeline,
+            pipeline_layout: compute_pipeline_layout,
+            push_constants: PushConstants::default()
+                .data_0(Vec4::new(0.14, 0.17, 0.36, 0.0))
+                .data_1(Vec4::new(0.1, 0.2, 0.4, 0.97)),
+        };
 
         Self {
             buffering: settings.buffering,
@@ -95,10 +182,10 @@ impl<'a> DrawManager {
             image,
             image_descriptor_set_layout,
             image_descriptor,
-            compute_shader,
-            compute_pipeline_layout,
-            compute_pipeline,
             frame_count: 0,
+
+            compute_effects: [gradient_effect, sky_effect],
+            compute_effect_index: 0,
         }
     }
 
@@ -142,18 +229,26 @@ impl<'a> DrawManager {
         command_buffer: vk::CommandBuffer,
     ) {
         unsafe {
+            let compute_effect = &self.compute_effects[self.compute_effect_index];
             device_handle.cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::COMPUTE,
-                self.compute_pipeline,
+                compute_effect.pipeline,
             );
             device_handle.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::COMPUTE,
-                self.compute_pipeline_layout,
+                compute_effect.pipeline_layout,
                 0,
                 &[self.image_descriptor],
                 &[],
+            );
+            device_handle.cmd_push_constants(
+                command_buffer,
+                compute_effect.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &compute_effect.push_constants.as_buffer(),
             );
             device_handle.cmd_dispatch(
                 command_buffer,
@@ -166,9 +261,11 @@ impl<'a> DrawManager {
 
     pub fn drop(&mut self, device_handle: &DeviceHandle) {
         unsafe {
-            device_handle.destroy_shader_module(self.compute_shader, None);
-            device_handle.destroy_pipeline_layout(self.compute_pipeline_layout, None);
-            device_handle.destroy_pipeline(self.compute_pipeline, None);
+            self.compute_effects.iter().for_each(|effect| {
+                device_handle.destroy_shader_module(effect.shader, None);
+                device_handle.destroy_pipeline_layout(effect.pipeline_layout, None);
+                device_handle.destroy_pipeline(effect.pipeline, None);
+            });
             self.frames
                 .iter_mut()
                 .for_each(|frame| frame.drop(device_handle));
@@ -284,22 +381,22 @@ impl<'a> ImmediateManager {
 
 #[allow(unused)]
 pub struct Renderer {
-    settings: Settings,
-    window: Window,
+    pub settings: Settings,
+    pub window: Window,
 
-    entry: Entry,
-    instance: Instance,
-    surface: Surface,
-    device: Device,
-    swapchain: Swapchain,
-    surface_support: SurfaceSupport,
-    graphics_queue: vk::Queue,
+    pub entry: Entry,
+    pub instance: Instance,
+    pub surface: Surface,
+    pub device: Device,
+    pub swapchain: Swapchain,
+    pub surface_support: SurfaceSupport,
+    pub graphics_queue: vk::Queue,
 
-    resource_allocator: ResourceAllocator,
-    descriptor_set_allocator: DescriptorSetAllocator,
+    pub resource_allocator: ResourceAllocator,
+    pub descriptor_set_allocator: DescriptorSetAllocator,
 
-    draw_manager: DrawManager,
-    // immediate_manager: ImmediateManager,
+    pub draw_manager: DrawManager,
+    // pub immediate_manager: ImmediateManager,
 }
 
 impl Renderer {

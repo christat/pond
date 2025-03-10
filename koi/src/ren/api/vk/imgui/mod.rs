@@ -23,6 +23,7 @@ const F32_SIZE: usize = size_of::<f32>();
 const IDX_SIZE: usize = size_of::<imgui::DrawIdx>();
 const VTX_SIZE: usize = size_of::<imgui::DrawVert>();
 
+#[allow(unused)]
 pub struct BackendRendererUserData {
     command_buffer: vk::CommandBuffer,
     pipeline: vk::Pipeline,

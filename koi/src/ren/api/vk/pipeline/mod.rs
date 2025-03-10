@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+
 use ash::{Device as DeviceHandle, vk};
 
 pub fn load_shader_module(
@@ -37,10 +39,11 @@ pub fn create_compute_pipeline(
     device_handle: &DeviceHandle,
     shader_module: vk::ShaderModule,
     layout: vk::PipelineLayout,
+    name: &CStr,
 ) -> vk::Pipeline {
     let stage = vk::PipelineShaderStageCreateInfo::default()
         .stage(vk::ShaderStageFlags::COMPUTE)
-        .name(c"main")
+        .name(name)
         .module(shader_module);
 
     let create_infos = [vk::ComputePipelineCreateInfo::default()

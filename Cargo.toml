@@ -5,6 +5,7 @@ members = [
     "koi",
     "shaders/imgui",
     "shaders/gradient",
+    "shaders/sky",
 ]
 
 [workspace.lints.rust]
