@@ -162,8 +162,8 @@ impl<'a> DrawManager {
             pipeline: gradient_pipeline,
             pipeline_layout: compute_pipeline_layout,
             push_constants: PushConstants::default()
-                .data_0(Vec4::new(1.0, 0.0, 0.0, 1.0))
-                .data_1(Vec4::new(0.0, 0.0, 1.0, 1.0)),
+                .data_0(Vec4::new(0.5, 0.54, 0.38, 1.0))
+                .data_1(Vec4::new(0.14, 0.44, 0.86, 1.0)),
         };
 
         let sky_effect = ComputeEffect {
@@ -184,7 +184,7 @@ impl<'a> DrawManager {
             image_descriptor,
             frame_count: 0,
 
-            compute_effects: [gradient_effect, sky_effect],
+            compute_effects: [sky_effect, gradient_effect],
             compute_effect_index: 0,
         }
     }
