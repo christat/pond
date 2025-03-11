@@ -50,7 +50,7 @@ pub fn main_cs(
 
     if texel_coord.x < image_size.x && texel_coord.y < image_size.y {
         let blend = texel_coord.y as f32 / image_size.y as f32;
-        let color = blend * top_color + (1.0 - blend) * bottom_color;
+        let color = blend * bottom_color + (1.0 - blend) * top_color;
         unsafe { image.write(texel_coord, color) };
     }
 }

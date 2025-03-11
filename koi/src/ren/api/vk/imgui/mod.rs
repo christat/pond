@@ -1,12 +1,12 @@
-use crate::{
-    macros::Convert,
-    ren::api::vk::{buffer::Buffer, device::config::QueueFamilyType, image::Image, pipeline},
+use crate::ren::api::vk::{
+    buffer::Buffer, device::config::QueueFamilyType, image::Image, pipeline,
 };
 
 use ash::{
     Device as DeviceHandle,
     vk::{self, Handle},
 };
+use bytemuck::cast_slice;
 use glam::Vec2;
 use gpu_allocator::{MemoryLocation, vulkan as vka};
 use imgui::{DrawData, internal::RawWrapper};
@@ -870,23 +870,20 @@ fn setup_render_state(
         -1.0 - draw_data.display_pos[1] * scale[1],
     );
 
-    let scale_buffer = scale.to_array().convert();
-    let translate_buffer = translate.to_array().convert();
-
     unsafe {
         api.device.handle.cmd_push_constants(
             command_buffer,
             pipeline_layout,
             vk::ShaderStageFlags::VERTEX,
             F32_SIZE as u32 * 0,
-            &scale_buffer,
+            cast_slice::<f32, u8>(&scale.to_array()),
         );
         api.device.handle.cmd_push_constants(
             command_buffer,
             pipeline_layout,
             vk::ShaderStageFlags::VERTEX,
             F32_SIZE as u32 * 2,
-            &translate_buffer,
+            cast_slice::<f32, u8>(&translate.to_array()),
         );
     }
 }

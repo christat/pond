@@ -10,11 +10,8 @@ pub mod resource_allocator;
 pub mod surface;
 pub mod swapchain;
 
-use std::u64;
-
 use crate::{
     imgui::ImGui,
-    macros::Convert,
     ren::{Info, Renderer as RendererTrait, Settings, Window, settings::Resolution},
     traits::Drop,
 };
@@ -29,6 +26,7 @@ use surface::Surface;
 use swapchain::{SurfaceSupport, Swapchain};
 
 use ash::{Device as DeviceHandle, Entry, vk};
+use bytemuck::cast;
 
 #[derive(Default)]
 pub struct PushConstants {
@@ -59,10 +57,10 @@ impl PushConstants {
         self
     }
     pub fn as_buffer(&self) -> [u8; 64] {
-        let data_0_buffer = self.data_0.to_array().convert();
-        let data_1_buffer = self.data_1.to_array().convert();
-        let data_2_buffer = self.data_2.to_array().convert();
-        let data_3_buffer = self.data_3.to_array().convert();
+        let data_0_buffer = cast::<[f32; 4], [u8; 16]>(self.data_0.to_array());
+        let data_1_buffer = cast::<[f32; 4], [u8; 16]>(self.data_1.to_array());
+        let data_2_buffer = cast::<[f32; 4], [u8; 16]>(self.data_2.to_array());
+        let data_3_buffer = cast::<[f32; 4], [u8; 16]>(self.data_3.to_array());
         [data_0_buffer, data_1_buffer, data_2_buffer, data_3_buffer]
             .as_flattened()
             .try_into()
@@ -88,6 +86,9 @@ pub struct DrawManager {
 
     pub compute_effects: [ComputeEffect; 2],
     pub compute_effect_index: usize,
+
+    pub graphics_pipeline_layout: vk::PipelineLayout,
+    pub graphics_pipeline: vk::Pipeline,
 }
 
 impl<'a> DrawManager {
@@ -126,13 +127,11 @@ impl<'a> DrawManager {
             descriptor_set_allocator.allocate(&device.handle, &image_descriptor_set_layouts);
         Self::update_sets(&device.handle, image.view, image_descriptor);
 
-        let gradient_shader = pipeline::load_shader_module(
-            &device.handle,
-            include_bytes!(env!("gradient.spv")),
-            None,
-        );
-        let sky_shader =
-            pipeline::load_shader_module(&device.handle, include_bytes!(env!("sky.spv")), None);
+        let gradient_shader = include_bytes!(env!("gradient.spv"));
+        let gradient_shader_module =
+            pipeline::load_shader_module(&device.handle, gradient_shader, None);
+        let sky_shader = include_bytes!(env!("sky.spv"));
+        let sky_shader_module = pipeline::load_shader_module(&device.handle, sky_shader, None);
 
         let push_constant_ranges = [vk::PushConstantRange::default()
             .offset(0)
@@ -143,38 +142,51 @@ impl<'a> DrawManager {
             &image_descriptor_set_layouts,
             Some(&push_constant_ranges),
         );
-        let gradient_pipeline = pipeline::create_compute_pipeline(
-            &device.handle,
-            gradient_shader,
-            compute_pipeline_layout,
-            c"main_cs",
-        );
-        let sky_pipeline = pipeline::create_compute_pipeline(
-            &device.handle,
-            sky_shader,
-            compute_pipeline_layout,
-            c"main_cs",
-        );
 
         let gradient_effect = ComputeEffect {
             name: String::from("gradient"),
-            shader: gradient_shader,
-            pipeline: gradient_pipeline,
+            shader: gradient_shader_module,
+            pipeline: pipeline::create_compute_pipeline(
+                &device.handle,
+                gradient_shader_module,
+                compute_pipeline_layout,
+            ),
             pipeline_layout: compute_pipeline_layout,
             push_constants: PushConstants::default()
-                .data_0(Vec4::new(0.5, 0.54, 0.38, 1.0))
-                .data_1(Vec4::new(0.14, 0.44, 0.86, 1.0)),
+                .data_0(Vec4::new(0.14, 0.44, 0.86, 1.0))
+                .data_1(Vec4::new(0.5, 0.54, 0.38, 1.0)),
         };
 
         let sky_effect = ComputeEffect {
             name: String::from("sky"),
-            shader: sky_shader,
-            pipeline: sky_pipeline,
+            shader: sky_shader_module,
+            pipeline: pipeline::create_compute_pipeline(
+                &device.handle,
+                sky_shader_module,
+                compute_pipeline_layout,
+            ),
             pipeline_layout: compute_pipeline_layout,
             push_constants: PushConstants::default()
-                .data_0(Vec4::new(0.14, 0.17, 0.36, 0.0))
-                .data_1(Vec4::new(0.1, 0.2, 0.4, 0.97)),
+                .data_0(Vec4::new(0.14, 0.17, 0.36, 1.0))
+                .data_1(Vec4::new(0.0, 0.0, 0.0, 0.98)),
         };
+
+        let triangle_shader = include_bytes!(env!("triangle.spv"));
+        let triangle_shader_module =
+            pipeline::load_shader_module(&device.handle, triangle_shader, None);
+        let graphics_pipeline_layout = pipeline::create_pipeline_layout(&device.handle, &[], None);
+        let graphics_pipeline = pipeline::PipelineBuilder::default()
+            .pipeline_layout(graphics_pipeline_layout)
+            .shaders(triangle_shader_module, None)
+            .input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+            .polygon_mode(vk::PolygonMode::FILL)
+            .cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
+            .multisampling()
+            .blending()
+            .depth_stencil_state()
+            .color_attachment_formats(&[image.format])
+            .depth_attachment_format(vk::Format::UNDEFINED)
+            .build(&device.handle);
 
         Self {
             buffering: settings.buffering,
@@ -186,6 +198,9 @@ impl<'a> DrawManager {
 
             compute_effects: [sky_effect, gradient_effect],
             compute_effect_index: 0,
+
+            graphics_pipeline,
+            graphics_pipeline_layout,
         }
     }
 
@@ -223,7 +238,7 @@ impl<'a> DrawManager {
         self.frame_count += 1;
     }
 
-    pub fn write_command_buffer(
+    pub fn draw_compute(
         &mut self,
         device_handle: &DeviceHandle,
         command_buffer: vk::CommandBuffer,
@@ -259,8 +274,58 @@ impl<'a> DrawManager {
         };
     }
 
+    pub fn draw_graphics(
+        &mut self,
+        device_handle: &DeviceHandle,
+        command_buffer: vk::CommandBuffer,
+    ) {
+        let color_attachments = [pipeline::get_attachment_info(
+            self.image.view,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            None,
+        )];
+
+        let rendering_info =
+            pipeline::get_rendering_info(self.image.extent_2d, &color_attachments, None);
+
+        unsafe {
+            device_handle.cmd_begin_rendering(command_buffer, &rendering_info);
+            device_handle.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.graphics_pipeline,
+            )
+        };
+
+        let viewports = [vk::Viewport::default()
+            .x(0.0)
+            .y(0.0)
+            .width(self.image.extent_2d.width as f32)
+            .height(self.image.extent_2d.height as f32)
+            .min_depth(0.0)
+            .max_depth(1.0)];
+
+        unsafe { device_handle.cmd_set_viewport(command_buffer, 0, &viewports) };
+
+        let scissors = [vk::Rect2D::default()
+            .offset(vk::Offset2D::default().x(0).y(0))
+            .extent(
+                vk::Extent2D::default()
+                    .width(self.image.extent_2d.width)
+                    .height(self.image.extent_2d.height),
+            )];
+
+        unsafe {
+            device_handle.cmd_set_scissor(command_buffer, 0, &scissors);
+            device_handle.cmd_draw(command_buffer, 3, 1, 0, 0);
+            device_handle.cmd_end_rendering(command_buffer);
+        }
+    }
+
     pub fn drop(&mut self, device_handle: &DeviceHandle) {
         unsafe {
+            device_handle.destroy_pipeline_layout(self.graphics_pipeline_layout, None);
+            device_handle.destroy_pipeline(self.graphics_pipeline, None);
             self.compute_effects.iter().for_each(|effect| {
                 device_handle.destroy_shader_module(effect.shader, None);
                 device_handle.destroy_pipeline_layout(effect.pipeline_layout, None);
@@ -554,14 +619,26 @@ impl RendererTrait for Renderer {
         );
 
         self.draw_manager
-            .write_command_buffer(&device_handle, command_buffer);
+            .draw_compute(&device_handle, command_buffer);
+
+        // transition draw image for graphics pipeline
+        image::transition(
+            &device_handle,
+            command_buffer,
+            image,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        );
+
+        self.draw_manager
+            .draw_graphics(&device_handle, command_buffer);
 
         // transition draw image for copy src and swaphain for copy dst; perform ccopy
         image::transition(
             &device_handle,
             command_buffer,
             image,
-            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
         );
         image::transition(

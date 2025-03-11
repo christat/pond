@@ -128,7 +128,7 @@ impl ImGui {
         let ui = self.context.frame();
         // ui.show_demo_window(&mut self.open);
 
-        ui.window("Compute Effect")
+        ui.window("Compute Pipeline")
             .size([300.0, 50.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 #[cfg(feature = "vulkan")]
@@ -147,6 +147,14 @@ impl ImGui {
                         }
                     }
 
+                    if compute_effect.name == "sky" {
+                        ui.slider(
+                            "Starfield Threshold",
+                            0.98,
+                            1.0,
+                            &mut compute_effect.push_constants.data_1.w,
+                        );
+                    }
                     ui.color_picker4(
                         "Push Constant 0",
                         compute_effect.push_constants.data_0.as_mut(),

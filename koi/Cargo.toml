@@ -7,6 +7,7 @@ edition = "2024"
 
 [dependencies]
 ash = "0.38.0"
+bytemuck = "1.22.0"
 glam = "0.30.0"
 gpu-allocator = "0.27.0"
 image = "0.25.5"
