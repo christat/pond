@@ -208,7 +208,7 @@ impl<'a> DrawManager {
             .polygon_mode(vk::PolygonMode::FILL)
             .cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
             .multisampling()
-            .blending()
+            .blending_alpha_blend()
             .depth_stencil_state(true, vk::CompareOp::GREATER_OR_EQUAL)
             .color_attachment_formats(&[color_image.format])
             .depth_attachment_format(depth_image.format)

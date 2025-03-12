@@ -85,11 +85,39 @@ impl<'a> PipelineBuilder<'a> {
         self
     }
 
-    pub fn blending(mut self) -> Self {
+    pub fn blending_disabled(mut self) -> Self {
         self.color_blend_attachment = self
             .color_blend_attachment
             .color_write_mask(vk::ColorComponentFlags::RGBA)
             .blend_enable(false);
+        self
+    }
+
+    pub fn blending_additive(mut self) -> Self {
+        self.color_blend_attachment = self
+            .color_blend_attachment
+            .color_write_mask(vk::ColorComponentFlags::RGBA)
+            .blend_enable(true)
+            .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+            .dst_color_blend_factor(vk::BlendFactor::ONE)
+            .color_blend_op(vk::BlendOp::ADD)
+            .src_alpha_blend_factor(vk::BlendFactor::ONE)
+            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+            .alpha_blend_op(vk::BlendOp::ADD);
+        self
+    }
+
+    pub fn blending_alpha_blend(mut self) -> Self {
+        self.color_blend_attachment = self
+            .color_blend_attachment
+            .color_write_mask(vk::ColorComponentFlags::RGBA)
+            .blend_enable(true)
+            .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+            .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+            .color_blend_op(vk::BlendOp::ADD)
+            .src_alpha_blend_factor(vk::BlendFactor::ONE)
+            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+            .alpha_blend_op(vk::BlendOp::ADD);
         self
     }
 

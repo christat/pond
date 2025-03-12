@@ -3,7 +3,9 @@
 #[cfg(not(target_arch = "spirv"))]
 use bytemuck::cast;
 
-use spirv_std::glam::{Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
+use spirv_std::glam::{Mat4, Vec4};
+#[cfg(not(target_arch = "spirv"))]
+use spirv_std::glam::{Vec2, Vec3, Vec4Swizzles};
 
 #[cfg_attr(not(target_arch = "spirv"), derive(Clone, Copy))]
 #[repr(C)]
