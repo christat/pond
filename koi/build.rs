@@ -1,6 +1,9 @@
 use glob::glob;
 use spirv_builder::{Capability, MetadataPrintout, SpirvBuilder};
 
+// TODO for glsl shaders (e.g.):
+// glslangValidator -V -e main_vs --source-entrypoint main .\vertex.vert -o .\vertex.spv
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     for path in glob("../shaders/*")
         .unwrap()

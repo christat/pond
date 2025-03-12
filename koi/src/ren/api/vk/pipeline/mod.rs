@@ -38,7 +38,7 @@ impl<'a> PipelineBuilder<'a> {
             vk::PipelineShaderStageCreateInfo::default()
                 .module(vertex)
                 .stage(vk::ShaderStageFlags::VERTEX)
-                .name(c"main"),
+                .name(c"main_vs"),
         );
         self.shader_stages.push(
             vk::PipelineShaderStageCreateInfo::default()
