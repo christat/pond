@@ -2,14 +2,18 @@ pub mod info;
 
 use crate::imgui;
 use crate::ren;
+use crate::scene;
+use crate::scene::Scene;
 
 use std::ffi::CStr;
+use std::path::Path;
 use winit::{application, dpi, error, event, event_loop, window};
 
 pub struct Runtime {
     pub window: window::Window,
     pub ren: ren::Handle,
     pub imgui: imgui::ImGui,
+    pub scene: Option<Scene>,
 }
 
 impl Drop for Runtime {
@@ -20,7 +24,18 @@ impl Drop for Runtime {
 
 impl Runtime {
     pub fn new(window: window::Window, ren: ren::Handle, imgui: imgui::ImGui) -> Self {
-        Self { window, ren, imgui }
+        Self {
+            window,
+            ren,
+            imgui,
+            scene: None,
+        }
+    }
+
+    pub fn load_scene(&mut self, path: &Path) {
+        let scene = scene::load(path);
+        self.ren.load_scene(&scene);
+        self.scene = Some(scene);
     }
 
     fn update(&mut self) {
@@ -67,6 +82,7 @@ impl application::ApplicationHandler for App<'_> {
         let window: window::Window = event_loop
             .create_window(window_attributes)
             .expect("koi::App - Failed to create window");
+
         let mut ren = ren::new(&self.info, &window);
         let imgui = imgui::ImGui::new(&window, &mut ren);
 
@@ -87,6 +103,9 @@ impl application::ApplicationHandler for App<'_> {
                 self.exit(event_loop);
             }
             event::WindowEvent::RedrawRequested => {
+                if runtime.scene.is_none() {
+                    runtime.load_scene(Path::new("assets/models/test.glb"));
+                }
                 runtime.update();
             }
             _ => {}

@@ -14,6 +14,7 @@ pub mod swapchain;
 use crate::{
     imgui::ImGui,
     ren::{Info, Renderer as RendererTrait, Settings, Window, settings::Resolution},
+    scene::Scene,
     traits::Drop,
 };
 use descriptor::{DescriptorSetAllocator, DescriptorSetLayoutBuilder, DescriptorSetPoolSizeRatio};
@@ -28,8 +29,8 @@ use swapchain::{SurfaceSupport, Swapchain};
 
 use ash::{Device as DeviceHandle, Entry, vk};
 use bytemuck::cast;
-use koi_gpu::{PUSH_CONSTANTS_SIZE, PushConstants, Vertex};
-use spirv_std::glam::{Vec2, Vec3, Vec4};
+use koi_gpu::{PUSH_CONSTANTS_SIZE, PushConstants};
+use spirv_std::glam::{Mat4, Vec4};
 
 #[derive(Default)]
 pub struct ComputePushConstants {
@@ -82,9 +83,10 @@ pub struct ComputePipeline {
 pub struct DrawManager {
     pub buffering: u32,
     pub frames: Vec<Frame>,
-    pub image: Image,
-    pub image_descriptor_set_layout: vk::DescriptorSetLayout,
-    pub image_descriptor: vk::DescriptorSet,
+    pub color_image: Image,
+    pub depth_image: Image,
+    pub color_image_descriptor_set_layout: vk::DescriptorSetLayout,
+    pub color_image_descriptor: vk::DescriptorSet,
     pub frame_count: u32,
 
     pub compute_pipelines: [ComputePipeline; 2],
@@ -94,7 +96,7 @@ pub struct DrawManager {
     pub graphics_pipeline: vk::Pipeline,
     pub vertex_shader_module: vk::ShaderModule,
     pub fragment_shader_module: vk::ShaderModule,
-    pub mesh: Mesh,
+    pub meshes: Vec<Mesh>,
 }
 
 impl<'a> DrawManager {
@@ -102,12 +104,11 @@ impl<'a> DrawManager {
         device: &Device,
         resource_allocator: &mut ResourceAllocator,
         descriptor_set_allocator: &mut DescriptorSetAllocator,
-        immediate_manager: &mut ImmediateManager,
         settings: &Settings,
     ) -> Self {
         let frames = Frame::generator(&device, settings.buffering);
         let Resolution { width, height } = settings.resolution;
-        let image = Image::new(
+        let color_image = Image::new(
             &device.handle,
             &mut resource_allocator.handle,
             &mut resource_allocator.global_resources,
@@ -119,20 +120,29 @@ impl<'a> DrawManager {
                 | vk::ImageUsageFlags::COLOR_ATTACHMENT,
             vk::ImageAspectFlags::COLOR,
         );
+        let depth_image = Image::new(
+            &device.handle,
+            &mut resource_allocator.handle,
+            &mut resource_allocator.global_resources,
+            vk::Format::D32_SFLOAT,
+            vk::Extent3D::default().width(width).height(height).depth(1),
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            vk::ImageAspectFlags::DEPTH,
+        );
 
         let mut descriptor_set_layout_builder =
             DescriptorSetLayoutBuilder::default().add_binding(0, vk::DescriptorType::STORAGE_IMAGE);
-        let image_descriptor_set_layout = descriptor_set_layout_builder
+        let color_image_descriptor_set_layout = descriptor_set_layout_builder
             .build::<vk::DescriptorSetLayoutBindingFlagsCreateInfo>(
             &device.handle,
             vk::ShaderStageFlags::COMPUTE,
             None,
             None,
         );
-        let image_descriptor_set_layouts = vec![image_descriptor_set_layout];
-        let image_descriptor =
-            descriptor_set_allocator.allocate(&device.handle, &image_descriptor_set_layouts);
-        Self::update_sets(&device.handle, image.view, image_descriptor);
+        let color_image_descriptor_set_layouts = vec![color_image_descriptor_set_layout];
+        let color_image_descriptor =
+            descriptor_set_allocator.allocate(&device.handle, &color_image_descriptor_set_layouts);
+        Self::update_sets(&device.handle, color_image.view, color_image_descriptor);
 
         let gradient_shader = include_bytes!(env!("gradient.spv"));
         let gradient_shader_module =
@@ -146,7 +156,7 @@ impl<'a> DrawManager {
             .stage_flags(vk::ShaderStageFlags::COMPUTE)];
         let compute_pipeline_layout = pipeline::create_pipeline_layout(
             &device.handle,
-            &image_descriptor_set_layouts,
+            &color_image_descriptor_set_layouts,
             Some(&push_constant_ranges),
         );
 
@@ -199,54 +209,18 @@ impl<'a> DrawManager {
             .cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
             .multisampling()
             .blending()
-            .depth_stencil_state()
-            .color_attachment_formats(&[image.format])
-            .depth_attachment_format(vk::Format::UNDEFINED)
+            .depth_stencil_state(true, vk::CompareOp::GREATER_OR_EQUAL)
+            .color_attachment_formats(&[color_image.format])
+            .depth_attachment_format(depth_image.format)
             .build(&device.handle);
-
-        let indices = [0, 1, 2, 2, 1, 3];
-        let vertices = [
-            Vertex::new(
-                Vec3::new(0.5, -0.5, 0.0),
-                Vec3::default(),
-                Vec2::default(),
-                Vec4::new(0.0, 0.0, 0.0, 1.0),
-            ),
-            Vertex::new(
-                Vec3::new(0.5, 0.5, 0.0),
-                Vec3::default(),
-                Vec2::default(),
-                Vec4::new(0.5, 0.5, 0.5, 1.0),
-            ),
-            Vertex::new(
-                Vec3::new(-0.5, -0.5, 0.0),
-                Vec3::default(),
-                Vec2::default(),
-                Vec4::new(1.0, 0.0, 0.0, 1.0),
-            ),
-            Vertex::new(
-                Vec3::new(-0.5, 0.5, 0.0),
-                Vec3::default(),
-                Vec2::default(),
-                Vec4::new(0.0, 1.0, 0.0, 1.0),
-            ),
-        ];
-
-        let mesh = Mesh::new(
-            &device.handle,
-            &mut resource_allocator.handle,
-            &mut resource_allocator.global_resources,
-            immediate_manager,
-            &indices,
-            &vertices,
-        );
 
         Self {
             buffering: settings.buffering,
             frames,
-            image,
-            image_descriptor_set_layout,
-            image_descriptor,
+            color_image,
+            depth_image,
+            color_image_descriptor_set_layout,
+            color_image_descriptor,
             frame_count: 0,
 
             compute_pipelines: [sky_pipeline, gradient_pipeline],
@@ -256,7 +230,27 @@ impl<'a> DrawManager {
             graphics_pipeline_layout,
             vertex_shader_module,
             fragment_shader_module,
-            mesh,
+            meshes: vec![],
+        }
+    }
+
+    pub fn load_scene(
+        &mut self,
+        device_handle: &DeviceHandle,
+        resource_allocator: &mut ResourceAllocator,
+        immediate_manager: &mut ImmediateManager,
+        scene: &Scene,
+    ) {
+        for mesh in &scene.meshes {
+            self.meshes.push(Mesh::new(
+                device_handle,
+                &mut resource_allocator.handle,
+                &mut resource_allocator.global_resources,
+                immediate_manager,
+                &mesh.indices,
+                &mesh.vertices,
+                mesh.surfaces.clone(),
+            ));
         }
     }
 
@@ -311,7 +305,7 @@ impl<'a> DrawManager {
                 vk::PipelineBindPoint::COMPUTE,
                 compute_pipeline.pipeline_layout,
                 0,
-                &[self.image_descriptor],
+                &[self.color_image_descriptor],
                 &[],
             );
             device_handle.cmd_push_constants(
@@ -323,8 +317,8 @@ impl<'a> DrawManager {
             );
             device_handle.cmd_dispatch(
                 command_buffer,
-                (self.image.extent_2d.width as f32 / 16.0).ceil() as u32,
-                (self.image.extent_2d.height as f32 / 16.0).ceil() as u32,
+                (self.color_image.extent_2d.width as f32 / 16.0).ceil() as u32,
+                (self.color_image.extent_2d.height as f32 / 16.0).ceil() as u32,
                 1,
             );
         };
@@ -336,13 +330,22 @@ impl<'a> DrawManager {
         command_buffer: vk::CommandBuffer,
     ) {
         let color_attachments = [pipeline::get_attachment_info(
-            self.image.view,
+            self.color_image.view,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             None,
         )];
-
-        let rendering_info =
-            pipeline::get_rendering_info(self.image.extent_2d, &color_attachments, None);
+        let mut depth_clear_value = vk::ClearValue::default();
+        depth_clear_value.depth_stencil = vk::ClearDepthStencilValue::default().depth(0.0);
+        let depth_attachment = pipeline::get_attachment_info(
+            self.depth_image.view,
+            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+            Some(depth_clear_value),
+        );
+        let rendering_info = pipeline::get_rendering_info(
+            self.color_image.extent_2d,
+            &color_attachments,
+            Some(&depth_attachment),
+        );
 
         unsafe {
             device_handle.cmd_begin_rendering(command_buffer, &rendering_info);
@@ -353,6 +356,14 @@ impl<'a> DrawManager {
             )
         };
 
+        let aspect_ratio =
+            self.color_image.extent_2d.width as f32 / self.color_image.extent_2d.height as f32;
+        let mut view = Mat4::IDENTITY;
+        *view.col_mut(3) = Vec4::new(0.0, 0.0, -5.0, 1.0);
+        let projection = Mat4::perspective_rh(70.0, aspect_ratio, 10000.0, 0.1);
+        let world_transform = projection * view;
+
+        let test_mesh = &self.meshes[2];
         unsafe {
             device_handle.cmd_push_constants(
                 command_buffer,
@@ -360,22 +371,24 @@ impl<'a> DrawManager {
                 vk::ShaderStageFlags::VERTEX,
                 0,
                 &PushConstants::default()
-                    .vertex_buffer_address(self.mesh.vertex_buffer_address)
+                    .vertex_buffer_address(test_mesh.vertex_buffer_address)
+                    .world_transform(world_transform)
                     .as_buffer(),
             );
             device_handle.cmd_bind_index_buffer(
                 command_buffer,
-                self.mesh.index_buffer.handle,
+                test_mesh.index_buffer.handle,
                 0,
                 vk::IndexType::UINT32,
             );
         };
 
+        let image_extent_height = self.color_image.extent_2d.height as f32;
         let viewports = [vk::Viewport::default()
             .x(0.0)
-            .y(0.0)
-            .width(self.image.extent_2d.width as f32)
-            .height(self.image.extent_2d.height as f32)
+            .y(image_extent_height)
+            .width(self.color_image.extent_2d.width as f32)
+            .height(-image_extent_height)
             .min_depth(0.0)
             .max_depth(1.0)];
 
@@ -385,13 +398,20 @@ impl<'a> DrawManager {
             .offset(vk::Offset2D::default().x(0).y(0))
             .extent(
                 vk::Extent2D::default()
-                    .width(self.image.extent_2d.width)
-                    .height(self.image.extent_2d.height),
+                    .width(self.color_image.extent_2d.width)
+                    .height(self.color_image.extent_2d.height),
             )];
 
         unsafe {
             device_handle.cmd_set_scissor(command_buffer, 0, &scissors);
-            device_handle.cmd_draw_indexed(command_buffer, 6, 1, 0, 0, 0);
+            device_handle.cmd_draw_indexed(
+                command_buffer,
+                test_mesh.surfaces[0].count,
+                1,
+                test_mesh.surfaces[0].start_index,
+                0,
+                0,
+            );
             device_handle.cmd_end_rendering(command_buffer);
         }
     }
@@ -410,7 +430,8 @@ impl<'a> DrawManager {
             self.frames
                 .iter_mut()
                 .for_each(|frame| frame.drop(device_handle));
-            device_handle.destroy_descriptor_set_layout(self.image_descriptor_set_layout, None);
+            device_handle
+                .destroy_descriptor_set_layout(self.color_image_descriptor_set_layout, None);
         };
     }
 }
@@ -596,13 +617,11 @@ impl RendererTrait for Renderer {
             DescriptorSetAllocator::new(&device.handle, 10, &pool_sizes);
         let graphics_queue = device.get_queue(QueueFamilyType::Graphics);
 
-        let mut immediate_manager = ImmediateManager::new(&device, graphics_queue);
-
+        let immediate_manager = ImmediateManager::new(&device, graphics_queue);
         let draw_manager = DrawManager::new(
             &device,
             &mut resource_allocator,
             &mut descriptor_set_allocator,
-            &mut immediate_manager,
             &settings,
         );
 
@@ -624,6 +643,15 @@ impl RendererTrait for Renderer {
             draw_manager,
             immediate_manager,
         }
+    }
+
+    fn load_scene(&mut self, scene: &Scene) {
+        self.draw_manager.load_scene(
+            &self.device.handle,
+            &mut self.resource_allocator,
+            &mut self.immediate_manager,
+            scene,
+        );
     }
 
     fn draw(&mut self, imgui: &mut ImGui) {
@@ -689,11 +717,11 @@ impl RendererTrait for Renderer {
         };
 
         // transition draw image to write
-        let image = self.draw_manager.image.handle.clone();
+        let color_image = self.draw_manager.color_image.handle.clone();
         image::transition(
             &device_handle,
             command_buffer,
-            image,
+            color_image,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::GENERAL,
         );
@@ -705,9 +733,17 @@ impl RendererTrait for Renderer {
         image::transition(
             &device_handle,
             command_buffer,
-            image,
+            color_image,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        );
+        // transition depth image for graphics pipeline
+        image::transition(
+            &device_handle,
+            command_buffer,
+            self.draw_manager.depth_image.handle.clone(),
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
 
         self.draw_manager
@@ -717,7 +753,7 @@ impl RendererTrait for Renderer {
         image::transition(
             &device_handle,
             command_buffer,
-            image,
+            color_image,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
         );
@@ -731,9 +767,9 @@ impl RendererTrait for Renderer {
         image::copy(
             &device_handle,
             command_buffer,
-            image,
+            color_image,
             swapchain_image,
-            self.draw_manager.image.extent_2d,
+            self.draw_manager.color_image.extent_2d,
             self.swapchain.extent,
         );
 

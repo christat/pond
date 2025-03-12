@@ -1,3 +1,5 @@
+use crate::scene::Surface;
+
 use super::{ImmediateManager, buffer::Buffer, resource_allocator::AllocatedResources};
 
 use ash::{Device as DeviceHandle, vk};
@@ -8,6 +10,7 @@ pub struct Mesh {
     pub index_buffer: Buffer,
     pub vertex_buffer: Buffer,
     pub vertex_buffer_address: vk::DeviceAddress,
+    pub surfaces: Vec<Surface>,
 }
 
 pub const INDEX_SIZE: u64 = size_of::<u32>() as u64;
@@ -20,6 +23,7 @@ impl Mesh {
         immediate_manager: &mut ImmediateManager,
         indices: &[u32],
         vertices: &[Vertex],
+        surfaces: Vec<Surface>,
     ) -> Self {
         let index_buffer_size = indices.len() as u64 * INDEX_SIZE;
         let index_buffer = Buffer::new(
@@ -97,6 +101,7 @@ impl Mesh {
             index_buffer,
             vertex_buffer,
             vertex_buffer_address,
+            surfaces,
         }
     }
 }

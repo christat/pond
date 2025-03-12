@@ -9,6 +9,7 @@ edition = "2024"
 ash = "0.38.0"
 bytemuck = "1.22.0"
 glam = "0.30.0"
+gltf = { version = "1.4.1", features = ["extras", "names"] }
 gpu-allocator = "0.27.0"
 image = "0.25.5"
 imgui = "0.12.0"

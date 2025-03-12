@@ -8,14 +8,14 @@ use spirv_std::glam::{Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
 #[cfg_attr(not(target_arch = "spirv"), derive(Clone, Copy))]
 #[repr(C)]
 pub struct PushConstants {
-    pub transform: Mat4,
+    pub world_transform: Mat4,
     pub vertex_buffer_address: u64,
 }
 
 #[cfg(not(target_arch = "spirv"))]
 impl PushConstants {
-    pub fn transform(mut self, transform: Mat4) -> Self {
-        self.transform = transform;
+    pub fn world_transform(mut self, world_transform: Mat4) -> Self {
+        self.world_transform = world_transform;
         self
     }
 
@@ -27,14 +27,14 @@ impl PushConstants {
     // TODO this is bad, and you should feel bad
     pub fn as_buffer(&self) -> [u8; 72] {
         [
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(0).xy().to_array()),
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(0).zw().to_array()),
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(1).xy().to_array()),
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(1).zw().to_array()),
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(2).xy().to_array()),
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(2).zw().to_array()),
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(3).xy().to_array()),
-            cast::<[f32; 2], [u8; 8]>(self.transform.col(3).zw().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(0).xy().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(0).zw().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(1).xy().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(1).zw().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(2).xy().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(2).zw().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(3).xy().to_array()),
+            cast::<[f32; 2], [u8; 8]>(self.world_transform.col(3).zw().to_array()),
             cast::<u64, [u8; 8]>(self.vertex_buffer_address),
         ]
         .as_flattened()
@@ -47,7 +47,7 @@ impl PushConstants {
 impl Default for PushConstants {
     fn default() -> Self {
         Self {
-            transform: Mat4::IDENTITY,
+            world_transform: Mat4::IDENTITY,
             vertex_buffer_address: Default::default(),
         }
     }

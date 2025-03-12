@@ -1,14 +1,18 @@
 pub mod imgui;
 
-use crate::ren::Renderer as RendererTrait;
+use crate::{
+    app::info::Info,
+    ren::{Renderer as RendererTrait, settings::Settings, window::Window},
+    scene::Scene,
+};
 pub struct Renderer {}
 
 impl RendererTrait for Renderer {
-    fn new(
-        info: &crate::app::info::Info,
-        settings: crate::ren::settings::Settings,
-        window: crate::ren::window::Window,
-    ) -> Self {
+    fn new(info: &Info, settings: Settings, window: Window) -> Self {
+        todo!()
+    }
+
+    fn load_scene(&mut self, scene: &Scene) {
         todo!()
     }
 

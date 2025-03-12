@@ -2,13 +2,14 @@ pub mod api;
 pub mod settings;
 pub mod window;
 
-use crate::{app::info::Info, imgui::ImGui};
+use crate::{app::info::Info, imgui::ImGui, scene::Scene};
 use settings::{Resolution, Settings};
 use window::Window;
 use winit::window::Window as WindowHandle;
 
 pub trait Renderer {
     fn new(info: &Info, settings: Settings, window: Window) -> Self;
+    fn load_scene(&mut self, scene: &Scene);
     fn draw(&mut self, imgui: &mut ImGui);
 }
 
@@ -36,6 +37,10 @@ pub fn new(info: &Info, window_handle: &WindowHandle) -> Handle {
 }
 
 impl Handle {
+    pub fn load_scene(&mut self, scene: &Scene) {
+        self.api.load_scene(scene);
+    }
+
     pub fn draw(&mut self, imgui: &mut ImGui) {
         self.api.draw(imgui);
     }
