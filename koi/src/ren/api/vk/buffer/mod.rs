@@ -10,9 +10,8 @@ pub struct Buffer {
     pub memory: vk::DeviceMemory,
 
     pub usage: vk::BufferUsageFlags,
-    pub sharing_mode: vk::SharingMode,
     pub location: MemoryLocation,
-    pub linear: bool,
+    pub min_alignment: usize,
 }
 
 impl Buffer {
@@ -21,15 +20,13 @@ impl Buffer {
         allocator: &mut vka::Allocator,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
-        sharing_mode: vk::SharingMode,
         name: &str,
         location: MemoryLocation,
-        linear: bool,
     ) -> (Self, vka::Allocation) {
         let create_info = vk::BufferCreateInfo::default()
             .size(size)
             .usage(usage)
-            .sharing_mode(sharing_mode);
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let buffer = unsafe {
             device_handle
@@ -43,7 +40,7 @@ impl Buffer {
                 name,
                 requirements,
                 location,
-                linear,
+                linear: true,
                 allocation_scheme: vka::AllocationScheme::DedicatedBuffer(buffer),
             })
             .expect("koi::ren::vk::buffer - failed to Allocate Buffer");
@@ -61,9 +58,8 @@ impl Buffer {
                 size,
                 memory,
                 usage,
-                sharing_mode,
                 location,
-                linear,
+                min_alignment: requirements.alignment as usize,
             },
             allocation,
         )
@@ -75,21 +71,11 @@ impl Buffer {
         resources: &mut AllocatedResources,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
-        sharing_mode: vk::SharingMode,
         name: &str,
         location: MemoryLocation,
-        linear: bool,
     ) -> Self {
-        let (buffer, allocation) = Self::create(
-            device_handle,
-            allocator,
-            size,
-            usage,
-            sharing_mode,
-            name,
-            location,
-            linear,
-        );
+        let (buffer, allocation) =
+            Self::create(device_handle, allocator, size, usage, name, location);
         resources.add_buffer(buffer.handle, allocation);
         buffer
     }
@@ -112,10 +98,8 @@ impl Buffer {
             allocator,
             size,
             self.usage,
-            self.sharing_mode,
             name,
             self.location,
-            self.linear,
         );
         self.handle = new_buffer.handle;
         self.size = size;
@@ -124,8 +108,13 @@ impl Buffer {
         new_allocation
     }
 
-    pub fn upload<T: Copy>(&mut self, src: &[T], dst: &mut vka::Allocation, min_alignment: usize) {
-        presser::copy_from_slice_to_offset_with_align(src, dst, 0, min_alignment)
-            .expect("koi::ren::vk::buffer - failed ot Upload to Buffer");
+    pub fn upload<T: Copy>(
+        &mut self,
+        src: &[T],
+        dst: &mut vka::Allocation,
+        start_offset: usize,
+    ) -> presser::CopyRecord {
+        presser::copy_from_slice_to_offset_with_align(src, dst, start_offset, self.min_alignment)
+            .expect("koi::ren::vk::buffer - failed to Upload to Buffer")
     }
 }

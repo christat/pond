@@ -1,4 +1,8 @@
-use crate::ren::{self, Handle as Renderer, api::vk::Renderer as vkRenderer};
+#[cfg(feature = "directx")]
+use crate::ren::api::dx::Renderer as dxRenderer;
+#[cfg(feature = "vulkan")]
+use crate::ren::api::vk::Renderer as vkRenderer;
+use crate::ren::{self, Handle as Renderer};
 
 use imgui::{Context, FontSource, StyleColor};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
@@ -134,20 +138,21 @@ impl ImGui {
                 #[cfg(feature = "vulkan")]
                 {
                     let draw_manager = &mut ren.api.draw_manager;
-                    let compute_effects_len = draw_manager.compute_effects.len();
+                    let compute_pipelines_len = draw_manager.compute_pipelines.len();
                     let compute_effect =
-                        &mut draw_manager.compute_effects[draw_manager.compute_effect_index];
+                        &mut draw_manager.compute_pipelines[draw_manager.compute_pipeline_index];
 
                     ui.text(format!("Compute Shader: {}\n", compute_effect.name));
 
-                    if ui.button("Toggle Compute Shader") {
-                        draw_manager.compute_effect_index = draw_manager.compute_effect_index + 1;
-                        if draw_manager.compute_effect_index >= compute_effects_len {
-                            draw_manager.compute_effect_index = 0;
-                        }
+                    if ui.button("Toggle Compute Pipeline") {
+                        draw_manager.compute_pipeline_index =
+                            (draw_manager.compute_pipeline_index + 1) % compute_pipelines_len;
                     }
 
-                    if compute_effect.name == "sky" {
+                    let is_sky = compute_effect.name == "sky";
+                    let is_gradient = compute_effect.name == "gradient";
+
+                    if is_sky {
                         ui.slider(
                             "Starfield Threshold",
                             0.98,
@@ -156,12 +161,16 @@ impl ImGui {
                         );
                     }
                     ui.color_picker4(
-                        "Push Constant 0",
+                        if is_sky {
+                            "Sky Color"
+                        } else {
+                            "Gradient Top Color"
+                        },
                         compute_effect.push_constants.data_0.as_mut(),
                     );
-                    if compute_effect.name == "gradient" {
+                    if is_gradient {
                         ui.color_picker4(
-                            "Push Constant 1",
+                            "Gradient Bottom Color",
                             compute_effect.push_constants.data_1.as_mut(),
                         );
                     }

@@ -3,7 +3,9 @@ resolver = "2"
 members = [
     "game",
     "koi",
+    "koi/gpu",
     "shaders/imgui",
+    "shaders/fragment",
     "shaders/gradient",
     "shaders/sky",
     "shaders/triangle",

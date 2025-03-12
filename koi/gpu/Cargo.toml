@@ -1,16 +1,15 @@
 cargo-features = ["edition2024"]
 
 [package]
-name = "triangle"
+name = "koi-gpu"
 version = "0.1.0"
 edition = "2024"
 
-[lib]
-crate-type = ["dylib"]
-
 [dependencies]
 spirv-std = { version = "0.9" }
-koi-gpu = { path = "../../koi/gpu" }
+
+[target.'cfg(not(target_arch = "spirv"))'.dependencies]
+bytemuck = "1.22.0"
 
 [lints]
 workspace = true

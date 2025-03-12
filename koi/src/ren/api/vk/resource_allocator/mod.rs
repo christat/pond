@@ -55,6 +55,7 @@ pub struct ResourceAllocator {
     pub handle: vka::Allocator,
     pub frame_resources: Vec<AllocatedResources>,
     pub global_resources: AllocatedResources,
+    pub min_alignment: usize,
 }
 
 #[allow(unused)]
@@ -64,6 +65,7 @@ impl ResourceAllocator {
         device: DeviceHandle,
         physical_device: vk::PhysicalDevice,
         settings: &Settings,
+        min_alignment: usize,
     ) -> Self {
         let handle = vka::Allocator::new(&vka::AllocatorCreateDesc {
             instance,
@@ -84,6 +86,7 @@ impl ResourceAllocator {
             handle,
             frame_resources,
             global_resources: AllocatedResources::new(),
+            min_alignment,
         }
     }
 
@@ -109,6 +112,7 @@ impl ResourceAllocator {
             .iter_mut()
             .for_each(|handle| handle.drop(device, &mut self.handle));
         self.global_resources.drop(device, &mut self.handle);
+        #[cfg(feature = "debug")]
         self.handle.report_memory_leaks(log::Level::Error);
     }
 }

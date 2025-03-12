@@ -42,20 +42,16 @@ pub fn create_render_buffers(
         allocator,
         IMGUI_DEFAULT_ALLOCATION_SIZE,
         vk::BufferUsageFlags::INDEX_BUFFER,
-        vk::SharingMode::EXCLUSIVE,
         &format!("imgui_index_buffer_{}", index),
         MemoryLocation::CpuToGpu,
-        true,
     );
     let (vertex_buffer, vertex_buffer_allocation) = Buffer::create(
         device_handle,
         allocator,
         IMGUI_DEFAULT_ALLOCATION_SIZE,
         vk::BufferUsageFlags::VERTEX_BUFFER,
-        vk::SharingMode::EXCLUSIVE,
         &format!("imgui_vertex_buffer_{}", index),
         MemoryLocation::CpuToGpu,
-        true,
     );
     (
         index_buffer,
@@ -208,17 +204,8 @@ impl Renderer {
                 vertices.extend_from_slice(draw_list.vtx_buffer());
             }
 
-            let min_alignment = api.device.get_min_memory_map_alignment();
-            index_buffer.upload(
-                indices.as_slice(),
-                &mut index_buffer_allocation,
-                min_alignment,
-            );
-            vertex_bufer.upload(
-                vertices.as_slice(),
-                &mut vertex_buffer_allocation,
-                min_alignment,
-            );
+            index_buffer.upload(indices.as_slice(), &mut index_buffer_allocation, 0);
+            vertex_bufer.upload(vertices.as_slice(), &mut vertex_buffer_allocation, 0);
         }
 
         // setup render state
@@ -680,17 +667,11 @@ fn create_font_atlas(
         &mut api.resource_allocator.handle,
         upload_size,
         vk::BufferUsageFlags::TRANSFER_SRC,
-        vk::SharingMode::EXCLUSIVE,
         "imgui_font_atlas_upload_buffer",
         MemoryLocation::CpuToGpu,
-        true,
     );
 
-    upload_buffer.upload(
-        font_atlas.data,
-        &mut upload_buffer_allocation,
-        api.device.get_min_memory_map_alignment(),
-    );
+    upload_buffer.upload(font_atlas.data, &mut upload_buffer_allocation, 0);
 
     let begin_info =
         vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);

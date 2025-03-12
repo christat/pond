@@ -44,7 +44,7 @@ impl Image {
                 requirements,
                 location: MemoryLocation::GpuOnly,
                 linear: false,
-                allocation_scheme: vka::AllocationScheme::GpuAllocatorManaged,
+                allocation_scheme: vka::AllocationScheme::DedicatedImage(image),
             })
             .expect("koi::vk::Image - failed to allocate Image");
 
