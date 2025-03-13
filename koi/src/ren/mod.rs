@@ -10,6 +10,7 @@ use winit::window::Window as WindowHandle;
 pub trait Renderer {
     fn new(info: &Info, settings: Settings, window: Window) -> Self;
     fn load_scene(&mut self, scene: &Scene);
+    fn handle_resize(&mut self, resolution: &Resolution);
     fn draw(&mut self, imgui: &mut ImGui);
 }
 
@@ -39,6 +40,10 @@ pub fn new(info: &Info, window_handle: &WindowHandle) -> Handle {
 impl Handle {
     pub fn load_scene(&mut self, scene: &Scene) {
         self.api.load_scene(scene);
+    }
+
+    pub fn handle_resize(&mut self, width: u32, height: u32) {
+        self.api.handle_resize(&Resolution::new(width, height));
     }
 
     pub fn draw(&mut self, imgui: &mut ImGui) {

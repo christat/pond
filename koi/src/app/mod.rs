@@ -7,6 +7,7 @@ use crate::scene::Scene;
 
 use std::ffi::CStr;
 use std::path::Path;
+use winit::dpi::PhysicalSize;
 use winit::{application, dpi, error, event, event_loop, window};
 
 pub struct Runtime {
@@ -36,6 +37,10 @@ impl Runtime {
         let scene = scene::load(path);
         self.ren.load_scene(&scene);
         self.scene = Some(scene);
+    }
+
+    pub fn handle_resize(&mut self, width: u32, height: u32) {
+        self.ren.handle_resize(width, height);
     }
 
     fn update(&mut self) {
@@ -99,6 +104,9 @@ impl application::ApplicationHandler for App<'_> {
         runtime.imgui.handle_window_event(&runtime.window, &event);
 
         match event {
+            event::WindowEvent::Resized(PhysicalSize { width, height }) => {
+                runtime.handle_resize(width, height);
+            }
             event::WindowEvent::CloseRequested => {
                 self.exit(event_loop);
             }

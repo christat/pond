@@ -25,6 +25,8 @@ impl InstanceConfig<'_> {
         let extensions = vec![
             khr::get_physical_device_properties2::NAME,
             khr::surface::NAME,
+            vk::KHR_GET_SURFACE_CAPABILITIES2_NAME,
+            vk::EXT_SURFACE_MAINTENANCE1_NAME,
             #[cfg(target_os = "windows")]
             khr::win32_surface::NAME,
             #[cfg(target_os = "linux")]

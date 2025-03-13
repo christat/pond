@@ -654,6 +654,16 @@ impl RendererTrait for Renderer {
         );
     }
 
+    fn handle_resize(&mut self, resolution: &Resolution) {
+        self.swapchain.resize(
+            &self.instance,
+            &self.device,
+            &self.surface,
+            &self.surface_support,
+            resolution,
+        );
+    }
+
     fn draw(&mut self, imgui: &mut ImGui) {
         const SECOND_IN_NS: u64 = 10e9 as u64;
 
@@ -689,16 +699,24 @@ impl RendererTrait for Renderer {
             .drop_frame_resources(&device_handle, frame_index);
 
         // request swapchain image
-        let (swapchain_image_index, _suboptimal) = unsafe {
-            self.swapchain
-                .device
-                .acquire_next_image(
-                    self.swapchain.khr,
-                    SECOND_IN_NS,
-                    swapchain_semaphore,
-                    vk::Fence::null(),
-                )
-                .expect("koi::ren::vk - Failed to acquire next Swapchain Image")
+        let mut swapchain_image_index = 0;
+        unsafe {
+            match self.swapchain.device.acquire_next_image(
+                self.swapchain.khr,
+                SECOND_IN_NS,
+                swapchain_semaphore,
+                vk::Fence::null(),
+            ) {
+                Ok((index, _suboptimal)) => {
+                    swapchain_image_index = index;
+                }
+                Err(e) => {
+                    if e == vk::Result::ERROR_OUT_OF_DATE_KHR {
+                        imgui.context.render(); // discard imgui draw
+                        return;
+                    }
+                }
+            };
         };
         let swapchain_image = self.swapchain.images[swapchain_image_index as usize];
 
@@ -833,10 +851,15 @@ impl RendererTrait for Renderer {
             .image_indices(&image_indices);
 
         unsafe {
-            self.swapchain
+            if let Err(e) = self
+                .swapchain
                 .device
                 .queue_present(self.graphics_queue, &present_info)
-                .expect("koi::ren::vk - failed to Present swapchain image")
+            {
+                if e == vk::Result::ERROR_OUT_OF_DATE_KHR {
+                    return;
+                }
+            }
         };
 
         // frame done.

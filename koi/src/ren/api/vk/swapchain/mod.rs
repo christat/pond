@@ -70,6 +70,10 @@ impl Swapchain {
         let min_image_count = select_swapchain_min_image_count(&surface_support);
         let (image_sharing_mode, queue_family_indices) = get_queue_family_config(device);
 
+        let mut scaling_info = vk::SwapchainPresentScalingCreateInfoEXT::default()
+            .scaling_behavior(vk::PresentScalingFlagsEXT::ASPECT_RATIO_STRETCH)
+            .present_gravity_x(vk::PresentGravityFlagsEXT::MIN)
+            .present_gravity_y(vk::PresentGravityFlagsEXT::MIN);
         let mut create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface.khr)
             .min_image_count(min_image_count)
@@ -82,7 +86,8 @@ impl Swapchain {
             .pre_transform(surface_support.capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(present_mode)
-            .clipped(true);
+            .clipped(true)
+            .push_next(&mut scaling_info);
 
         if !queue_family_indices.is_empty() {
             create_info = create_info.queue_family_indices(&queue_family_indices)
@@ -140,6 +145,27 @@ impl Swapchain {
             image_views,
             extent: swapchain_extent,
         }
+    }
+
+    pub fn resize(
+        &mut self,
+        instance: &Instance,
+        device: &Device,
+        surface: &Surface,
+        surface_support: &SurfaceSupport,
+        resolution: &Resolution,
+    ) {
+        unsafe {
+            device
+                .handle
+                .device_wait_idle()
+                .expect("koi::vk::swapchain - failed to wait for device idle");
+        }
+
+        self.drop(&device.handle);
+
+        let swapchain = Self::create(instance, device, surface, surface_support, resolution);
+        *self = swapchain;
     }
 
     pub fn drop(&mut self, device_handle: &DeviceHandle) {

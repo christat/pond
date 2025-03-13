@@ -160,7 +160,11 @@ impl DeviceConfig<'_> {
         instance: &Instance,
         valid_physical_device: &ValidPhysicalDevice,
     ) -> Result<Self, DeviceConfigError<'a>> {
-        let extensions = vec![khr::swapchain::NAME, khr::dynamic_rendering::NAME];
+        let extensions = vec![
+            khr::swapchain::NAME,
+            vk::EXT_SWAPCHAIN_MAINTENANCE1_NAME,
+            khr::dynamic_rendering::NAME,
+        ];
 
         validate_extensions(instance, valid_physical_device.handle, &extensions)?;
 
