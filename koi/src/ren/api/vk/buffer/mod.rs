@@ -1,4 +1,4 @@
-use super::resource_allocator::AllocatedResources;
+use crate::ren::Allocator;
 
 use ash::{Device as DeviceHandle, vk};
 use gpu_allocator::{MemoryLocation, vulkan as vka};
@@ -8,7 +8,6 @@ pub struct Buffer {
     pub handle: vk::Buffer,
     pub size: vk::DeviceSize,
     pub memory: vk::DeviceMemory,
-
     pub usage: vk::BufferUsageFlags,
     pub location: MemoryLocation,
     pub min_alignment: usize,
@@ -67,16 +66,21 @@ impl Buffer {
 
     pub fn new(
         device_handle: &DeviceHandle,
-        allocator: &mut vka::Allocator,
-        resources: &mut AllocatedResources,
+        allocator: &mut Allocator,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
         name: &str,
         location: MemoryLocation,
     ) -> Self {
-        let (buffer, allocation) =
-            Self::create(device_handle, allocator, size, usage, name, location);
-        resources.add_buffer(buffer.handle, allocation);
+        let (buffer, allocation) = Self::create(
+            device_handle,
+            &mut allocator.handle,
+            size,
+            usage,
+            name,
+            location,
+        );
+        allocator.add_buffer(None, buffer.handle, allocation);
         buffer
     }
 

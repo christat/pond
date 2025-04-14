@@ -1,15 +1,14 @@
-use super::resource_allocator::AllocatedResources;
+use crate::ren::Allocator;
 
 use ash::{Device as DeviceHandle, vk};
 use gpu_allocator::{MemoryLocation, vulkan as vka};
 
-#[allow(unused)]
 pub struct Image {
     pub handle: vk::Image,
     pub view: vk::ImageView,
-    pub extent_3d: vk::Extent3D,
-    pub extent_2d: vk::Extent2D,
+    pub extent: vk::Extent3D,
     pub format: vk::Format,
+    pub layout: vk::ImageLayout,
 }
 
 impl Image {
@@ -20,6 +19,7 @@ impl Image {
         extent: vk::Extent3D,
         usage: vk::ImageUsageFlags,
         aspect_mask: vk::ImageAspectFlags,
+        layout: vk::ImageLayout,
     ) -> (Self, vka::Allocation) {
         let image_create_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
@@ -27,6 +27,7 @@ impl Image {
             .extent(extent)
             .mip_levels(1)
             .array_layers(1)
+            .initial_layout(layout)
             .samples(vk::SampleCountFlags::TYPE_1)
             .tiling(vk::ImageTiling::OPTIMAL)
             .usage(usage);
@@ -73,17 +74,13 @@ impl Image {
                 .expect("koi::vk::Image - failed to create Image View")
         };
 
-        let extent_2d = vk::Extent2D::default()
-            .width(extent.width)
-            .height(extent.height);
-
         (
             Self {
                 handle: image,
                 view,
-                extent_3d: extent,
-                extent_2d,
+                extent,
                 format,
+                layout,
             },
             allocation,
         )
@@ -91,27 +88,89 @@ impl Image {
 
     pub fn new(
         device_handle: &DeviceHandle,
-        allocator: &mut vka::Allocator,
-        resources: &mut AllocatedResources,
+        allocator: &mut Allocator,
         format: vk::Format,
         extent: vk::Extent3D,
         usage: vk::ImageUsageFlags,
         aspect_mask: vk::ImageAspectFlags,
+        layout: vk::ImageLayout,
     ) -> Self {
-        let (image, allocation) =
-            Self::create(device_handle, allocator, format, extent, usage, aspect_mask);
-        resources.add_image(image.handle, image.view, allocation);
+        let (image, allocation) = Self::create(
+            device_handle,
+            &mut allocator.handle,
+            format,
+            extent,
+            usage,
+            aspect_mask,
+            layout,
+        );
+        allocator.add_image(None, image.handle, image.view, allocation);
         image
     }
-}
 
-pub fn get_subresource_range(aspect_mask: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
-    vk::ImageSubresourceRange::default()
-        .aspect_mask(aspect_mask)
-        .base_mip_level(0)
-        .level_count(vk::REMAINING_MIP_LEVELS)
-        .base_array_layer(0)
-        .layer_count(vk::REMAINING_ARRAY_LAYERS)
+    pub fn transition(
+        &mut self,
+        device_handle: &DeviceHandle,
+        command_buffer: vk::CommandBuffer,
+        new_layout: vk::ImageLayout,
+    ) {
+        transition(
+            device_handle,
+            command_buffer,
+            self.handle,
+            self.layout,
+            new_layout,
+        );
+        self.layout = new_layout;
+    }
+
+    pub fn copy(
+        &self,
+        device_handle: &DeviceHandle,
+        cmd: vk::CommandBuffer,
+        dst_image: vk::Image,
+        dst_extent: vk::Extent2D,
+    ) {
+        let regions = [vk::ImageBlit2::default()
+            .src_offsets([
+                vk::Offset3D::default(),
+                vk::Offset3D::default()
+                    .x(self.extent.width as i32)
+                    .y(self.extent.height as i32)
+                    .z(1),
+            ])
+            .dst_offsets([
+                vk::Offset3D::default(),
+                vk::Offset3D::default()
+                    .x(dst_extent.width as i32)
+                    .y(dst_extent.height as i32)
+                    .z(1),
+            ])
+            .src_subresource(
+                vk::ImageSubresourceLayers::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .base_array_layer(0)
+                    .layer_count(1)
+                    .mip_level(0),
+            )
+            .dst_subresource(
+                vk::ImageSubresourceLayers::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .base_array_layer(0)
+                    .layer_count(1)
+                    .mip_level(0),
+            )];
+
+        let blit_image_info = vk::BlitImageInfo2::default()
+            .src_image(self.handle)
+            .src_image_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .dst_image(dst_image)
+            .dst_image_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .filter(vk::Filter::LINEAR)
+            .regions(&regions);
+
+        unsafe { device_handle.cmd_blit_image2(cmd, &blit_image_info) };
+    }
 }
 
 pub fn transition(
@@ -121,12 +180,17 @@ pub fn transition(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
 ) {
-    let subresource_range =
-        get_subresource_range(if new_layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
+    let subresource_range = vk::ImageSubresourceRange::default()
+        .base_mip_level(0)
+        .level_count(vk::REMAINING_MIP_LEVELS)
+        .base_array_layer(0)
+        .layer_count(vk::REMAINING_ARRAY_LAYERS)
+        .aspect_mask(if new_layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
             vk::ImageAspectFlags::DEPTH
         } else {
             vk::ImageAspectFlags::COLOR
         });
+
     let image_barriers = [vk::ImageMemoryBarrier2::default()
         .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
         .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
@@ -140,53 +204,4 @@ pub fn transition(
     let dependency_info = vk::DependencyInfo::default().image_memory_barriers(&image_barriers);
 
     unsafe { device_handle.cmd_pipeline_barrier2(command_buffer, &dependency_info) };
-}
-
-pub fn copy(
-    device_handle: &DeviceHandle,
-    cmd: vk::CommandBuffer,
-    src_image: vk::Image,
-    dst_image: vk::Image,
-    src_extent: vk::Extent2D,
-    dst_extent: vk::Extent2D,
-) {
-    let regions = [vk::ImageBlit2::default()
-        .src_offsets([
-            vk::Offset3D::default(),
-            vk::Offset3D::default()
-                .x(src_extent.width as i32)
-                .y(src_extent.height as i32)
-                .z(1),
-        ])
-        .dst_offsets([
-            vk::Offset3D::default(),
-            vk::Offset3D::default()
-                .x(dst_extent.width as i32)
-                .y(dst_extent.height as i32)
-                .z(1),
-        ])
-        .src_subresource(
-            vk::ImageSubresourceLayers::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_array_layer(0)
-                .layer_count(1)
-                .mip_level(0),
-        )
-        .dst_subresource(
-            vk::ImageSubresourceLayers::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_array_layer(0)
-                .layer_count(1)
-                .mip_level(0),
-        )];
-
-    let blit_image_info = vk::BlitImageInfo2::default()
-        .src_image(src_image)
-        .src_image_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
-        .dst_image(dst_image)
-        .dst_image_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-        .filter(vk::Filter::LINEAR)
-        .regions(&regions);
-
-    unsafe { device_handle.cmd_blit_image2(cmd, &blit_image_info) };
 }

@@ -4,19 +4,13 @@ pub struct DescriptorSetLayoutBuilder<'a> {
     pub bindings: Vec<vk::DescriptorSetLayoutBinding<'a>>,
 }
 
-#[allow(unused)]
 impl<'a> DescriptorSetLayoutBuilder<'a> {
     pub fn default() -> Self {
         Self { bindings: vec![] }
     }
 
     pub fn add_binding(mut self, binding: u32, descriptor_type: vk::DescriptorType) -> Self {
-        self.bindings.push(
-            vk::DescriptorSetLayoutBinding::default()
-                .binding(binding)
-                .descriptor_count(1)
-                .descriptor_type(descriptor_type),
-        );
+        self.bindings.push(vk::DescriptorSetLayoutBinding::default().binding(binding).descriptor_count(1).descriptor_type(descriptor_type));
         self
     }
 
@@ -31,13 +25,9 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         flags: Option<vk::DescriptorSetLayoutCreateFlags>,
         next: Option<&'a mut T>,
     ) -> vk::DescriptorSetLayout {
-        self.bindings
-            .iter_mut()
-            .for_each(|binding| binding.stage_flags = binding.stage_flags | shader_stages);
+        self.bindings.iter_mut().for_each(|binding| binding.stage_flags = binding.stage_flags | shader_stages);
 
-        let mut create_info = vk::DescriptorSetLayoutCreateInfo::default()
-            .bindings(&self.bindings)
-            .flags(flags.unwrap_or_default());
+        let mut create_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&self.bindings).flags(flags.unwrap_or_default());
 
         if next.is_some() {
             create_info = create_info.push_next(next.unwrap());
@@ -57,57 +47,46 @@ pub struct DescriptorSetPoolSizeRatio {
 }
 
 impl DescriptorSetPoolSizeRatio {
-    pub fn new(ty: vk::DescriptorType, ratio: f32) -> Self {
-        Self { ty, ratio }
+    pub fn new(ty: vk::DescriptorType) -> Self {
+        Self { ty, ratio: 1f32 }
     }
 }
 
 pub struct DescriptorSetAllocator {
-    pool: vk::DescriptorPool,
+    pub pool: vk::DescriptorPool,
 }
 
-#[allow(unused)]
 impl DescriptorSetAllocator {
     pub fn new(
         device_handle: &DeviceHandle,
         max_sets: u32,
         pool_ratios: &[DescriptorSetPoolSizeRatio],
+        flags: Option<vk::DescriptorPoolCreateFlags>,
     ) -> Self {
         let pool_sizes: Vec<_> = pool_ratios
             .iter()
             .map(|pool_ratio| {
-                vk::DescriptorPoolSize::default()
-                    .ty(pool_ratio.ty)
-                    .descriptor_count((pool_ratio.ratio * max_sets as f32) as u32)
+                vk::DescriptorPoolSize::default().ty(pool_ratio.ty).descriptor_count((pool_ratio.ratio * max_sets as f32) as u32)
             })
             .collect();
 
         let create_info = vk::DescriptorPoolCreateInfo::default()
+            .flags(flags.unwrap_or(vk::DescriptorPoolCreateFlags::empty()))
             .max_sets(max_sets)
             .pool_sizes(&pool_sizes);
 
         let pool = unsafe {
-            device_handle
-                .create_descriptor_pool(&create_info, None)
-                .expect("koi::ren::vk::descriptor - failed to Create Descriptor Pool")
+            device_handle.create_descriptor_pool(&create_info, None).expect("koi::ren::vk::descriptor - failed to Create Descriptor Pool")
         };
 
         Self { pool }
     }
 
-    pub fn allocate(
-        &mut self,
-        device_handle: &DeviceHandle,
-        layouts: &[vk::DescriptorSetLayout],
-    ) -> vk::DescriptorSet {
-        let allocate_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(self.pool)
-            .set_layouts(layouts);
+    pub fn allocate(&mut self, device_handle: &DeviceHandle, layouts: &[vk::DescriptorSetLayout]) -> vk::DescriptorSet {
+        let allocate_info = vk::DescriptorSetAllocateInfo::default().descriptor_pool(self.pool).set_layouts(layouts);
 
         unsafe {
-            device_handle
-                .allocate_descriptor_sets(&allocate_info)
-                .expect("koi::ren::vk::descriptor - failed to Allocate Descriptor Set")[0]
+            device_handle.allocate_descriptor_sets(&allocate_info).expect("koi::ren::vk::descriptor - failed to Allocate Descriptor Set")[0]
         }
     }
 

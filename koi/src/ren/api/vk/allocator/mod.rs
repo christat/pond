@@ -1,15 +1,15 @@
-use crate::ren::settings::Settings;
+use crate::ren::Settings;
 
 use ash::{Device as DeviceHandle, Instance as InstanceHandle, vk};
 use gpu_allocator::vulkan as vka;
 use std::collections::VecDeque;
 
-pub struct AllocatedResources {
+pub struct ResourceManager {
     pub images: VecDeque<(vk::Image, vk::ImageView, vka::Allocation)>,
     pub buffers: VecDeque<(vk::Buffer, vka::Allocation)>,
 }
 
-impl AllocatedResources {
+impl ResourceManager {
     pub fn new() -> Self {
         Self {
             images: VecDeque::new(),
@@ -26,8 +26,63 @@ impl AllocatedResources {
         self.images.push_back((image, view, allocation));
     }
 
+    pub fn drop_image(
+        &mut self,
+        device: &DeviceHandle,
+        allocator: &mut vka::Allocator,
+        image: vk::Image,
+    ) {
+        let search = self.images.iter().enumerate().find_map(|(i, (img, _, _))| {
+            if *img == image {
+                return Some(i);
+            } else {
+                return None;
+            }
+        });
+        match search {
+            None => {}
+            Some(index) => {
+                let (image, image_view, allocation) = self.images.remove(index).unwrap();
+                unsafe {
+                    device.destroy_image_view(image_view, None);
+                    device.destroy_image(image, None);
+                    allocator
+                        .free(allocation)
+                        .expect("koi::vk::allocator - failed to free Image Allocation");
+                }
+            }
+        }
+    }
+
     pub fn add_buffer(&mut self, buffer: vk::Buffer, allocation: vka::Allocation) {
         self.buffers.push_back((buffer, allocation));
+    }
+
+    pub fn drop_buffer(
+        &mut self,
+        device: &DeviceHandle,
+        allocator: &mut vka::Allocator,
+        buffer: vk::Buffer,
+    ) {
+        let search = self.buffers.iter().enumerate().find_map(|(i, (buf, _))| {
+            if *buf == buffer {
+                return Some(i);
+            } else {
+                return None;
+            }
+        });
+        match search {
+            None => {}
+            Some(index) => {
+                let (buffer, allocation) = self.buffers.remove(index).unwrap();
+                unsafe {
+                    device.destroy_buffer(buffer, None);
+                    allocator
+                        .free(allocation)
+                        .expect("koi::vk::allocator - failed to free Buffer Allocation");
+                }
+            }
+        }
     }
 
     pub fn drop(&mut self, device: &DeviceHandle, allocator: &mut vka::Allocator) {
@@ -51,15 +106,14 @@ impl AllocatedResources {
     }
 }
 
-pub struct ResourceAllocator {
+pub struct Allocator {
     pub handle: vka::Allocator,
-    pub frame_resources: Vec<AllocatedResources>,
-    pub global_resources: AllocatedResources,
-    pub min_alignment: usize,
+    pub frame_resources: Vec<ResourceManager>,
+    pub global_resources: ResourceManager,
 }
 
 #[allow(unused)]
-impl ResourceAllocator {
+impl Allocator {
     pub fn new(
         instance: InstanceHandle,
         device: DeviceHandle,
@@ -79,14 +133,38 @@ impl ResourceAllocator {
 
         let frame_resources = (0..settings.buffering)
             .into_iter()
-            .map(|_| AllocatedResources::new())
+            .map(|_| ResourceManager::new())
             .collect();
 
         Self {
             handle,
             frame_resources,
-            global_resources: AllocatedResources::new(),
-            min_alignment,
+            global_resources: ResourceManager::new(),
+        }
+    }
+
+    pub fn add_buffer(
+        &mut self,
+        frame: Option<usize>,
+        buffer: vk::Buffer,
+        allocation: vka::Allocation,
+    ) {
+        match frame {
+            Some(index) => self.frame_resources[index].add_buffer(buffer, allocation),
+            None => self.global_resources.add_buffer(buffer, allocation),
+        }
+    }
+
+    pub fn drop_buffer(
+        &mut self,
+        device: &DeviceHandle,
+        allocator: &mut vka::Allocator,
+        frame: Option<usize>,
+        buffer: vk::Buffer,
+    ) {
+        match frame {
+            Some(index) => self.frame_resources[index].drop_buffer(device, allocator, buffer),
+            None => self.global_resources.drop_buffer(device, allocator, buffer),
         }
     }
 
@@ -100,6 +178,19 @@ impl ResourceAllocator {
         match frame {
             Some(index) => self.frame_resources[index].add_image(image, view, allocation),
             None => self.global_resources.add_image(image, view, allocation),
+        }
+    }
+
+    pub fn drop_image(
+        &mut self,
+        device: &DeviceHandle,
+        allocator: &mut vka::Allocator,
+        frame: Option<usize>,
+        image: vk::Image,
+    ) {
+        match frame {
+            Some(index) => self.frame_resources[index].drop_image(device, allocator, image),
+            None => self.global_resources.drop_image(device, allocator, image),
         }
     }
 

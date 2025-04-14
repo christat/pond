@@ -5,7 +5,7 @@ use std::{
     u32,
 };
 
-use crate::ren::api::vk::surface::Surface;
+use crate::ren::Surface;
 
 pub struct DeviceConfig<'a> {
     pub extensions: Vec<&'a CStr>,

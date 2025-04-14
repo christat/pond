@@ -1,5 +1,4 @@
-use super::{device::Device, instance::Instance, surface::Surface};
-use crate::ren::settings::Resolution;
+use crate::ren::{Device, Instance, Surface, settings::Resolution};
 
 use ash::{Device as DeviceHandle, khr, vk};
 use std::cmp;

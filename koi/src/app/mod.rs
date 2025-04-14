@@ -1,9 +1,7 @@
-pub mod info;
+mod info;
+pub use info::*;
 
-use crate::imgui;
-use crate::ren;
-use crate::scene;
-use crate::scene::Scene;
+use crate::{imgui, ren, scene::Scene};
 
 use std::ffi::CStr;
 use std::path::Path;
@@ -34,7 +32,7 @@ impl Runtime {
     }
 
     pub fn load_scene(&mut self, path: &Path) {
-        let scene = scene::load(path);
+        let scene = Scene::load(path);
         self.ren.load_scene(&scene);
         self.scene = Some(scene);
     }

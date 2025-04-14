@@ -1,9 +1,10 @@
-use crate::scene::Surface;
-
-use super::{ImmediateManager, buffer::Buffer, resource_allocator::AllocatedResources};
+use crate::{
+    ren::{Allocator, Buffer, SubmitManager},
+    scene::Surface,
+};
 
 use ash::{Device as DeviceHandle, vk};
-use gpu_allocator::{MemoryLocation, vulkan as vka};
+use gpu_allocator::MemoryLocation;
 use koi_gpu::{VERTEX_SIZE, Vertex};
 
 pub struct Mesh {
@@ -18,9 +19,8 @@ pub const INDEX_SIZE: u64 = size_of::<u32>() as u64;
 impl Mesh {
     pub fn new(
         device_handle: &DeviceHandle,
-        allocator: &mut vka::Allocator,
-        resources: &mut AllocatedResources,
-        immediate_manager: &mut ImmediateManager,
+        allocator: &mut Allocator,
+        submit_manager: &mut SubmitManager,
         indices: &[u32],
         vertices: &[Vertex],
         surfaces: Vec<Surface>,
@@ -29,7 +29,6 @@ impl Mesh {
         let index_buffer = Buffer::new(
             device_handle,
             allocator,
-            resources,
             index_buffer_size,
             vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
             "mesh_indices",
@@ -40,7 +39,6 @@ impl Mesh {
         let vertex_buffer = Buffer::new(
             device_handle,
             allocator,
-            resources,
             vertex_buffer_size,
             vk::BufferUsageFlags::STORAGE_BUFFER
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -57,7 +55,7 @@ impl Mesh {
 
         let (mut staging_buffer, mut staging_allocation) = Buffer::create(
             device_handle,
-            allocator,
+            &mut allocator.handle,
             index_buffer_size + vertex_buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             "mesh_staging",
@@ -71,7 +69,7 @@ impl Mesh {
             vertices_record.copy_end_offset_padded,
         );
 
-        immediate_manager.submit(device_handle, &|command_buffer: vk::CommandBuffer| unsafe {
+        submit_manager.submit(device_handle, &|command_buffer: vk::CommandBuffer| unsafe {
             device_handle.cmd_copy_buffer(
                 command_buffer,
                 staging_buffer.handle,
@@ -94,6 +92,7 @@ impl Mesh {
         });
 
         allocator
+            .handle
             .free(staging_allocation)
             .expect("koi::ren::vk::mesh - failed to Free Staging Buffer allocation");
 

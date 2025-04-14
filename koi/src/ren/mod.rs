@@ -1,10 +1,11 @@
-pub mod api;
-pub mod settings;
-pub mod window;
+mod api;
+mod settings;
+mod window;
+pub use api::*;
+pub use settings::*;
+pub use window::*;
 
-use crate::{app::info::Info, imgui::ImGui, scene::Scene};
-use settings::{Resolution, Settings};
-use window::Window;
+use crate::{app::Info, imgui::ImGui, scene::Scene};
 use winit::window::Window as WindowHandle;
 
 pub trait Renderer {

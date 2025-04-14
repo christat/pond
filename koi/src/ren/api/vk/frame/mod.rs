@@ -1,4 +1,4 @@
-use super::device::{Device, config::QueueFamilyType};
+use crate::ren::{Device, QueueFamilyType};
 
 use ash::{Device as DeviceHandle, vk};
 
@@ -89,21 +89,4 @@ fn create_fence(device_handle: &DeviceHandle, flags: Option<vk::FenceCreateFlags
             .create_fence(&create_info, None)
             .expect("koi::ren::vk::Frame - failed to reate Fence")
     }
-}
-
-pub fn get_submit_info<'a>(
-    command_buffer_infos: &'a [vk::CommandBufferSubmitInfo<'a>],
-    wait_semaphore_infos: Option<&'a [vk::SemaphoreSubmitInfo]>,
-    signal_semaphore_infos: Option<&'a [vk::SemaphoreSubmitInfo]>,
-) -> vk::SubmitInfo2<'a> {
-    let mut submit_info = vk::SubmitInfo2::default().command_buffer_infos(command_buffer_infos);
-
-    if wait_semaphore_infos.is_some() {
-        submit_info = submit_info.wait_semaphore_infos(wait_semaphore_infos.unwrap());
-    };
-    if signal_semaphore_infos.is_some() {
-        submit_info = submit_info.signal_semaphore_infos(signal_semaphore_infos.unwrap());
-    };
-
-    submit_info
 }

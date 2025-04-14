@@ -1,8 +1,9 @@
 #[cfg(feature = "directx")]
-use crate::ren::api::dx::Renderer as dxRenderer;
+use crate::ren::vk::{Renderer as DxRenderer, imgui::Renderer as DxImGuiRenderer};
 #[cfg(feature = "vulkan")]
-use crate::ren::api::vk::Renderer as vkRenderer;
-use crate::ren::{self, Handle as Renderer};
+use crate::ren::vk::{Renderer as VkRenderer, imgui::Renderer as VkImGuiRenderer};
+
+use crate::ren::Handle as Renderer;
 
 use imgui::{Context, FontSource, StyleColor};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
@@ -130,23 +131,22 @@ impl ImGui {
             .expect("koi::imgui - failed to prepare ImGui frame");
 
         let ui = self.context.frame();
-        // ui.show_demo_window(&mut self.open);
 
         ui.window("Compute Pipeline")
             .size([300.0, 50.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 #[cfg(feature = "vulkan")]
                 {
-                    let draw_manager = &mut ren.api.draw_manager;
-                    let compute_pipelines_len = draw_manager.compute_pipelines.len();
-                    let compute_effect =
-                        &mut draw_manager.compute_pipelines[draw_manager.compute_pipeline_index];
+                    let render_manager = &mut ren.api.render_manager;
+                    let compute_pipelines_len = render_manager.compute_pipelines.len();
+                    let compute_effect = &mut render_manager.compute_pipelines
+                        [render_manager.compute_pipeline_index];
 
                     ui.text(format!("Compute Shader: {}\n", compute_effect.name));
 
                     if ui.button("Toggle Compute Pipeline") {
-                        draw_manager.compute_pipeline_index =
-                            (draw_manager.compute_pipeline_index + 1) % compute_pipelines_len;
+                        render_manager.compute_pipeline_index =
+                            (render_manager.compute_pipeline_index + 1) % compute_pipelines_len;
                     }
 
                     let is_sky = compute_effect.name == "sky";
@@ -180,8 +180,13 @@ impl ImGui {
         self.platform.prepare_render(ui, window_handle);
     }
 
+    #[cfg(feature = "directx")]
+    pub fn draw(&mut self, api: &mut DxRenderer) {
+        self.renderer.draw(&mut self.context, api);
+    }
+
     #[cfg(feature = "vulkan")]
-    pub fn draw(&mut self, api: &mut vkRenderer, command_buffer: ash::vk::CommandBuffer) {
+    pub fn draw(&mut self, api: &mut VkRenderer, command_buffer: ash::vk::CommandBuffer) {
         self.renderer.draw(&mut self.context, api, command_buffer);
     }
 
@@ -198,17 +203,17 @@ impl ImGui {
 
 pub struct ImGuiRenderer {
     #[cfg(feature = "directx")]
-    api: ren::api::dx::imgui::Renderer,
+    api: DxImGuiRenderer,
     #[cfg(feature = "vulkan")]
-    api: ren::api::vk::imgui::Renderer,
+    api: VkImGuiRenderer,
 }
 
 impl ImGuiRenderer {
     pub fn new(context: &mut imgui::Context, ren: &mut Renderer, image_count: u32) -> Self {
         #[cfg(feature = "directx")]
-        let api = ren::api::dx::imgui::Renderer::new(context, &mut ren.api, image_count);
+        let api = DxImGuiRenderer::new(context, &mut ren.api, image_count);
         #[cfg(feature = "vulkan")]
-        let api = ren::api::vk::imgui::Renderer::new(context, &mut ren.api, image_count);
+        let api = VkImGuiRenderer::new(context, &mut ren.api, image_count);
 
         Self { api }
     }
@@ -217,7 +222,7 @@ impl ImGuiRenderer {
     pub fn draw(
         &mut self,
         context: &mut imgui::Context,
-        api: &mut vkRenderer,
+        api: &mut VkRenderer,
         command_buffer: ash::vk::CommandBuffer,
     ) {
         self.api.draw(context, api, command_buffer);

@@ -1,8 +1,8 @@
-pub mod config;
+mod config;
+pub use config::*;
 
-use super::surface::Surface;
+use crate::ren::Surface;
 use crate::traits;
-use config::{PhysicalDeviceProperties, PhysicalDeviceQueueFamilies, QueueFamilyType};
 
 use ash::{Device as DeviceHandle, Instance, vk};
 

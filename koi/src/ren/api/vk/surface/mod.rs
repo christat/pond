@@ -1,4 +1,4 @@
-use crate::{ren::window::Window, traits};
+use crate::{ren::Window, traits};
 
 use ash::{Entry, Instance, khr, vk};
 

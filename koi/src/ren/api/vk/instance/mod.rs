@@ -1,6 +1,7 @@
-pub mod config;
+mod config;
+pub use config::*;
 
-use crate::{app::info::Info, traits};
+use crate::{app::Info, traits};
 
 use ash::{Entry, Instance as VkInstance, ext::debug_utils, vk};
 
